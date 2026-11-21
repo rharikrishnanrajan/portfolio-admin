@@ -71,11 +71,13 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
           .from(table)
           .insert(rowData as unknown as Record<string, unknown>)
           .select()
-          .single()
 
         if (insertError) throw insertError
+        if (!data || data.length === 0) {
+          throw new Error('No row was inserted. Check your login and permissions.')
+        }
 
-        const savedRow = data as unknown as T
+        const savedRow = data[0] as unknown as T
         setRows((prev) => {
           const next = [...prev, savedRow]
           if (orderBy) {
@@ -95,16 +97,24 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
         return savedRow
       } else {
         const { id, ...updates } = row
+        delete (updates as Record<string, unknown>).updated_at
+
+        if (!id) {
+          throw new Error('No row was updated. Check the id and your login.')
+        }
+
         const { data, error: updateError } = await supabase
           .from(table)
           .update(updates as unknown as Record<string, unknown>)
           .eq('id', id)
           .select()
-          .single()
 
         if (updateError) throw updateError
+        if (!data || data.length === 0) {
+          throw new Error('No row was updated. Check the id and your login.')
+        }
 
-        const savedRow = data as unknown as T
+        const savedRow = data[0] as unknown as T
         setRows((prev) => prev.map((r) => (r.id === id ? savedRow : r)))
         return savedRow
       }
@@ -175,12 +185,16 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
       if (!current) return
 
       const nextValue = !current[field]
-      const { error: toggleError } = await supabase
+      const { data, error: toggleError } = await supabase
         .from(table)
         .update({ [field]: nextValue })
         .eq('id', id)
+        .select()
 
       if (toggleError) throw toggleError
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check the id and your login.')
+      }
 
       setRows((prev) =>
         prev.map((r) => (r.id === id ? { ...r, [field]: nextValue } : r))

@@ -146,12 +146,16 @@ export default function About() {
       }
 
       if (targetId) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('sections')
           .update({ content: mergedContent })
           .eq('id', targetId)
+          .select()
 
         if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('No row was updated. Check your permissions and try again.')
+        }
       } else {
         const { data: created, error } = await supabase
           .from('sections')
@@ -169,6 +173,9 @@ export default function About() {
           .single()
 
         if (error) throw error
+        if (!created) {
+          throw new Error('No row was inserted. Check your permissions and try again.')
+        }
         setSectionRow(created as SectionRow)
       }
 
@@ -176,6 +183,7 @@ export default function About() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setSectionError(msg)
+      toast.error(msg)
     } finally {
       setSavingSection(false)
     }

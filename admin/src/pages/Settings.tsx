@@ -132,7 +132,7 @@ export default function Settings() {
       if (!brand.brand_name.trim()) throw new Error('Brand name is required.')
       if (!brand.logo_text.trim()) throw new Error('Logo text is required.')
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('site_settings')
         .update({
           brand_name: brand.brand_name.trim(),
@@ -140,12 +140,18 @@ export default function Settings() {
           nav_cta_label: brand.nav_cta_label.trim(),
         })
         .eq('id', 1)
+        .select()
 
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check your permissions and try again.')
+      }
+
       toast.success('Brand settings saved.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setBrandError(msg)
+      toast.error(msg)
     } finally {
       setSavingBrand(false)
     }
@@ -187,16 +193,22 @@ export default function Settings() {
         ...hero,
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('site_settings')
         .update({ hero: mergedHero })
         .eq('id', 1)
+        .select()
 
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check your permissions and try again.')
+      }
+
       toast.success('Hero settings saved.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setHeroError(msg)
+      toast.error(msg)
     } finally {
       setSavingHero(false)
     }
@@ -222,16 +234,22 @@ export default function Settings() {
         ...footer,
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('site_settings')
         .update({ footer: mergedFooter })
         .eq('id', 1)
+        .select()
 
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check your permissions and try again.')
+      }
+
       toast.success('Footer settings saved.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setFooterError(msg)
+      toast.error(msg)
     } finally {
       setSavingFooter(false)
     }
@@ -257,16 +275,22 @@ export default function Settings() {
         ...seo,
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('site_settings')
         .update({ seo: mergedSeo })
         .eq('id', 1)
+        .select()
 
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check your permissions and try again.')
+      }
+
       toast.success('SEO settings saved.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setSeoError(msg)
+      toast.error(msg)
     } finally {
       setSavingSeo(false)
     }

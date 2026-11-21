@@ -42,6 +42,7 @@ export default function Certifications() {
   const [editingItem, setEditingItem] = useState<Partial<CertificationRow> | null>(null)
   const [startMonth, setStartMonth] = useState<string>('')
   const [endMonth, setEndMonth] = useState<string>('')
+  const [credentialUrl, setCredentialUrl] = useState<string>('')
   const [savingItem, setSavingItem] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -70,6 +71,7 @@ export default function Certifications() {
     })
     setStartMonth('')
     setEndMonth('')
+    setCredentialUrl('')
     setFormError(null)
   }
 
@@ -82,6 +84,7 @@ export default function Certifications() {
     })
     setStartMonth(dbDateToMonth(item.start_date))
     setEndMonth(dbDateToMonth(item.end_date))
+    setCredentialUrl(item.credential_url || '')
     setFormError(null)
   }
 
@@ -89,34 +92,27 @@ export default function Certifications() {
     setEditingItem(null)
     setStartMonth('')
     setEndMonth('')
+    setCredentialUrl('')
     setFormError(null)
   }
 
   // Handle uploaded credential PDF
   const handlePdfUploaded = async (file: ProjectFile) => {
-    if (!editingItem) return
-
-    // If an old credential PDF was present, delete it from storage
-    if (editingItem.credential_url && editingItem.credential_url !== file.url) {
-      await deleteStoragePdf(editingItem.credential_url)
+    // If an old credential PDF was in storage, delete it
+    if (credentialUrl && credentialUrl !== file.url && extractStoragePath('portfolio', credentialUrl)) {
+      await deleteStoragePdf(credentialUrl)
     }
 
-    setEditingItem({
-      ...editingItem,
-      credential_url: file.url,
-    })
-    toast.success('Credential PDF uploaded.')
+    setCredentialUrl(file.url)
+    toast.success('Credential PDF uploaded and URL updated.')
   }
 
   // Handle remove credential PDF
   const handleRemovePdf = async () => {
-    if (!editingItem?.credential_url) return
-
-    await deleteStoragePdf(editingItem.credential_url)
-    setEditingItem({
-      ...editingItem,
-      credential_url: null,
-    })
+    if (credentialUrl) {
+      await deleteStoragePdf(credentialUrl)
+    }
+    setCredentialUrl('')
     toast.info('Credential PDF removed from storage.')
   }
 
@@ -133,7 +129,9 @@ export default function Certifications() {
       setFormError('Issuer organization is required.')
       return
     }
-    if (editingItem.credential_url && !isValidUrl(editingItem.credential_url)) {
+
+    const trimmedUrl = credentialUrl.trim()
+    if (trimmedUrl && !isValidUrl(trimmedUrl)) {
       setFormError('Credential URL must start with http:// or https://')
       return
     }
@@ -146,23 +144,46 @@ export default function Certifications() {
     try {
       const dbStartDate = monthToDbDate(startMonth)
       const dbEndDate = monthToDbDate(endMonth)
+      const finalCredentialUrl = trimmedUrl || null
 
-      await save({
-        ...editingItem,
+      // If user changed or cleared an existing storage PDF, clean it up from storage
+      if (
+        editingItem.credential_url &&
+        editingItem.credential_url !== finalCredentialUrl &&
+        extractStoragePath('portfolio', editingItem.credential_url)
+      ) {
+        await deleteStoragePdf(editingItem.credential_url)
+      }
+
+      const payload: Partial<CertificationRow> = {
         title: editingItem.title.trim(),
         issuer: editingItem.issuer.trim(),
         start_date: dbStartDate,
         end_date: dbEndDate,
-        credential_url: editingItem.credential_url?.trim() || null,
+        credential_url: finalCredentialUrl,
         featured: editingItem.featured ?? false,
         visible: editingItem.visible ?? true,
-      })
+      }
+
+      if (editingItem.id) {
+        payload.id = editingItem.id
+      }
+      if (editingItem.position !== undefined) {
+        payload.position = editingItem.position
+      }
+
+      const savedRow = await save(payload)
+      if (!savedRow) {
+        throw new Error('No row was updated. Check the id and your login.')
+      }
 
       toast.success(editingItem.id ? 'Certification updated.' : 'Certification created.')
       setEditingItem(null)
+      setCredentialUrl('')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setFormError(msg)
+      toast.error(msg)
     } finally {
       setSavingItem(false)
     }
@@ -294,7 +315,7 @@ export default function Certifications() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field
               type="month"
-              label="Issue Date (Month / Year)"
+              label="Start"
               value={startMonth}
               onChange={(e) => setStartMonth(e.target.value)}
               hint="Month and year certification was awarded"
@@ -302,7 +323,7 @@ export default function Certifications() {
             />
             <Field
               type="month"
-              label="Expiration Date (Month / Year)"
+              label="End"
               value={endMonth}
               onChange={(e) => setEndMonth(e.target.value)}
               hint="Leave empty if no expiration / lifetime validity"
@@ -310,28 +331,36 @@ export default function Certifications() {
             />
           </div>
 
-          {/* Credential PDF Upload & URL */}
+          {/* Credential URL & Document Upload */}
           <div className="space-y-4 pt-2 border-t border-line">
+            <Field
+              label="Credential URL / Verification Link"
+              value={credentialUrl}
+              onChange={(e) => setCredentialUrl(e.target.value)}
+              placeholder="https://www.credly.com/badges/... or upload a PDF below"
+              hint="External badge link, verification URL, or auto-filled when uploading a certificate PDF. Empty box saves null."
+            />
+
             <div>
               <p className="font-mono text-xs uppercase tracking-wider text-muted mb-1.5">
                 Credential Document (PDF)
               </p>
-              {editingItem.credential_url ? (
+              {credentialUrl && extractStoragePath('portfolio', credentialUrl) ? (
                 <div className="border border-line bg-surface p-3.5 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="p-2 border border-line bg-bg text-accent shrink-0">
                       <FileText className="size-5" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink truncate">Credential Document</p>
+                      <p className="text-sm font-semibold text-ink truncate">Attached Storage Document</p>
                       <p className="text-xs text-muted truncate font-mono">
-                        {editingItem.credential_url}
+                        {credentialUrl}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <a
-                      href={editingItem.credential_url}
+                      href={credentialUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
@@ -355,23 +384,10 @@ export default function Certifications() {
                   folder="certifications"
                   accept=".pdf,application/pdf"
                   onUploaded={handlePdfUploaded}
-                  hint="Upload credential verification PDF to the portfolio bucket (up to 10 MB)"
+                  hint="Upload certificate verification PDF to the portfolio bucket (auto-populates Credential URL above)"
                 />
               )}
             </div>
-
-            {/* Manual Credential URL alternative */}
-            {!editingItem.credential_url && (
-              <Field
-                label="Or Verification / Badge Link (URL)"
-                value={editingItem.credential_url || ''}
-                onChange={(e) =>
-                  setEditingItem({ ...editingItem, credential_url: e.target.value })
-                }
-                placeholder="https://www.credly.com/badges/..."
-                hint="Alternatively, provide a direct verification link from Credly, Accredible, etc."
-              />
-            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-line p-4 bg-bg/40">

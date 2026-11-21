@@ -114,7 +114,7 @@ export default function Profile() {
         throw new Error('Please enter a valid email address.')
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profile')
         .update({
           full_name: profile.full_name.trim(),
@@ -129,12 +129,17 @@ export default function Profile() {
           show_phone: profile.show_phone,
         })
         .eq('id', 1)
+        .select()
 
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was updated. Check your permissions and try again.')
+      }
       toast.success('Profile updated successfully.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setProfileError(msg)
+      toast.error(msg)
     } finally {
       setSavingProfile(false)
     }

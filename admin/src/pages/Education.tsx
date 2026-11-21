@@ -41,7 +41,7 @@ export default function Education() {
     setEditingItem({
       degree: '',
       institution: '',
-      score_label: 'GPA',
+      score_label: 'CGPA',
       score: '',
       note: '',
       visible: true,
@@ -52,7 +52,7 @@ export default function Education() {
   const handleEdit = (item: EducationRow) => {
     setEditingItem({
       ...item,
-      score_label: item.score_label || 'GPA',
+      score_label: item.score_label || 'CGPA',
       score: item.score || '',
       note: item.note || '',
     })
@@ -84,7 +84,7 @@ export default function Education() {
         ...editingItem,
         degree: editingItem.degree.trim(),
         institution: editingItem.institution.trim(),
-        score_label: editingItem.score_label?.trim() || 'GPA',
+        score_label: editingItem.score_label?.trim() || 'CGPA',
         score: editingItem.score?.trim() || null,
         note: editingItem.note?.trim() || null,
         visible: editingItem.visible ?? true,
@@ -209,7 +209,7 @@ export default function Education() {
               label="Score Label"
               value={editingItem.score_label || ''}
               onChange={(e) => setEditingItem({ ...editingItem, score_label: e.target.value })}
-              placeholder="e.g. GPA, CGPA, Percentage, Honors"
+              placeholder="e.g. CGPA, GPA, Percentage, Honors"
               hint="Label displayed next to the score"
             />
             <Field

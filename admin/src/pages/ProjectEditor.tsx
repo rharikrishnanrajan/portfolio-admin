@@ -167,6 +167,9 @@ export default function ProjectEditor() {
           .single()
 
         if (error) throw error
+        if (!data) {
+          throw new Error('No row was inserted. Check your permissions and try again.')
+        }
 
         const saved = data as unknown as ProjectRow
         setProject(saved)
@@ -195,17 +198,20 @@ export default function ProjectEditor() {
           .update(updateData)
           .eq('id', id)
           .select()
-          .single()
 
         if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('No row was updated. Check the id and your login.')
+        }
 
-        const saved = data as unknown as ProjectRow
+        const saved = data[0] as unknown as ProjectRow
         setProject(saved)
         toast.success('Project saved successfully.')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setFormError(msg)
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -226,13 +232,16 @@ export default function ProjectEditor() {
 
     // If persisted row exists, update row in database immediately
     if (project.id) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('projects')
         .update({ cover_url: newUrl })
         .eq('id', project.id)
+        .select()
 
       if (error) {
         toast.error(`Failed to update cover URL: ${error.message}`)
+      } else if (!data || data.length === 0) {
+        toast.error('Failed to update cover URL: No row was updated.')
       } else if (!newUrl) {
         toast.info('Cover image removed from storage.')
       } else {
@@ -247,13 +256,16 @@ export default function ProjectEditor() {
     setProject((prev) => ({ ...prev, files: nextFiles }))
 
     if (project.id) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('projects')
         .update({ files: nextFiles })
         .eq('id', project.id)
+        .select()
 
       if (error) {
         toast.error(`Failed to update files in database: ${error.message}`)
+      } else if (!data || data.length === 0) {
+        toast.error('Failed to update files in database: No row was updated.')
       } else {
         toast.success(`Attached "${newFile.name}".`)
       }
@@ -268,12 +280,16 @@ export default function ProjectEditor() {
       setProject((prev) => ({ ...prev, files: nextFiles }))
 
       if (project.id) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('projects')
           .update({ files: nextFiles })
           .eq('id', project.id)
+          .select()
 
         if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('No row was updated. Check your permissions and try again.')
+        }
       }
       toast.success(`Removed "${fileToRemove.name}" from storage.`)
     } catch (err) {
@@ -287,8 +303,17 @@ export default function ProjectEditor() {
     if (!project.id) return
     try {
       await deleteProjectStorage(project.id, project.files, project.cover_url)
-      const { error } = await supabase.from('projects').delete().eq('id', project.id)
+      const { data, error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', project.id)
+        .select()
+
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('No row was deleted. Check your permissions and try again.')
+      }
+
       toast.success('Project deleted.')
       navigate('/projects')
     } catch (err) {
