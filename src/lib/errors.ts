@@ -9,7 +9,14 @@
 export function friendlyErrorMessage(err: unknown): string {
   if (!err) return 'An unexpected error occurred. Please try again.'
 
-  const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err)
+  const msg =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+        ? err.message
+        : typeof (err as Record<string, unknown>)?.message === 'string'
+          ? (err as Record<string, unknown>).message as string
+          : String(err)
   const code = (err as { code?: string })?.code || ''
   const status =
     (err as { status?: number })?.status ||
