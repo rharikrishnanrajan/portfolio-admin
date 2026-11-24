@@ -12,6 +12,7 @@ import {
 import { useCrud } from '../lib/useCrud'
 import { formatDateDisplay } from '../lib/date'
 import { isValidUrl } from '../lib/validation'
+import { safeUrl } from '../lib/safeUrl'
 import {
   PageHeader,
   Field,
@@ -359,10 +360,10 @@ export default function Publications() {
                       </p>
                     )}
 
-                    {item.url && (
+                    {safeUrl(item.url) ? (
                       <div className="mt-2">
                         <a
-                          href={item.url}
+                          href={safeUrl(item.url)!}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-xs font-mono text-accent hover:underline"
@@ -371,7 +372,7 @@ export default function Publications() {
                           <ExternalLink className="size-3" />
                         </a>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 

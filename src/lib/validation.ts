@@ -1,11 +1,16 @@
+import { safeUrl } from './safeUrl'
+
 /**
  * Validates URLs. When filled, URLs must start with http:// or https://.
+ * If allowMailtoTel is true, mailto: and tel: are also permitted.
  * Empty or whitespace-only values are considered valid (optional fields).
  */
-export function isValidUrl(url: string | null | undefined): boolean {
+export function isValidUrl(
+  url: string | null | undefined,
+  options: { allowMailtoTel?: boolean } = {}
+): boolean {
   if (!url || !url.trim()) return true
-  const trimmed = url.trim()
-  return /^https?:\/\/.+/i.test(trimmed)
+  return safeUrl(url, { allowMailtoTel: options.allowMailtoTel ?? false }) !== null
 }
 
 /**

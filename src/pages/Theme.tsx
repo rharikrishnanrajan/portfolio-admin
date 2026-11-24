@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { rgbStringToHex, hexToRgbString, contrastRatio } from '../lib/color'
+import { siteSettingsSchema } from '../lib/schemas'
 import { PageHeader, useToast } from '../components/ui'
 import type { SiteThemeJson, ThemePalette } from '../types/rows'
 
@@ -254,6 +255,9 @@ export default function Theme() {
         dark,
         light,
       }
+
+      const val = siteSettingsSchema.partial().safeParse({ theme: merged })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
       const { data, error } = await supabase
         .from('site_settings')

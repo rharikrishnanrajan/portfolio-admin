@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Download, Upload, FileJson } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { isValidUrl } from '../lib/validation'
+import { siteSettingsSchema } from '../lib/schemas'
 import { PageHeader, Field, TextArea, TagInput, useToast } from '../components/ui'
 import type {
   SiteSettingsRow,
@@ -236,6 +237,13 @@ export default function Settings() {
       if (!brand.brand_name.trim()) throw new Error('Brand name is required.')
       if (!brand.logo_text.trim()) throw new Error('Logo text is required.')
 
+      const val = siteSettingsSchema.partial().safeParse({
+        brand_name: brand.brand_name.trim(),
+        logo_text: brand.logo_text.trim(),
+        nav_cta_label: brand.nav_cta_label.trim(),
+      })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
+
       const { data, error } = await supabase
         .from('site_settings')
         .update({
@@ -299,6 +307,9 @@ export default function Settings() {
         ...hero,
       }
 
+      const val = siteSettingsSchema.partial().safeParse({ hero: mergedHero })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
+
       const { data, error } = await supabase
         .from('site_settings')
         .update({ hero: mergedHero })
@@ -342,6 +353,9 @@ export default function Settings() {
         ...footer,
       }
 
+      const val = siteSettingsSchema.partial().safeParse({ footer: mergedFooter })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
+
       const { data, error } = await supabase
         .from('site_settings')
         .update({ footer: mergedFooter })
@@ -384,6 +398,9 @@ export default function Settings() {
         ...currentSeo,
         ...seo,
       }
+
+      const val = siteSettingsSchema.partial().safeParse({ seo: mergedSeo })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
       const { data, error } = await supabase
         .from('site_settings')

@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from 'lucide-react'
 import { safeName, uploadFile } from '../../lib/storage'
+import { safeImageUrl } from '../../lib/safeUrl'
 
 export interface ImageUploadProps {
   bucket?: string
@@ -82,7 +83,7 @@ export function ImageUpload({
         <div className="relative group border border-line bg-surface p-2 max-w-sm">
           <div className="aspect-video w-full overflow-hidden bg-bg/50 flex items-center justify-center">
             <img
-              src={value}
+              src={safeImageUrl(value) || ''}
               alt="Uploaded preview"
               className="w-full h-full object-contain"
             />

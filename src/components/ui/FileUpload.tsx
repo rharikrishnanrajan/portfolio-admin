@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { AlertCircle, ExternalLink, FileText, Loader2, Upload, X } from 'lucide-react'
 import { safeName, uploadFile } from '../../lib/storage'
+import { safeUrl } from '../../lib/safeUrl'
 import type { ProjectFile } from '../../types/rows'
 
 export interface FileUploadProps {
@@ -133,15 +134,21 @@ export function FileListItem({
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <a
-          href={file.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted hover:text-ink transition-colors p-1"
-          title="Open in new tab"
-        >
-          <ExternalLink className="size-3.5" />
-        </a>
+        {safeUrl(file.url) ? (
+          <a
+            href={safeUrl(file.url)!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted hover:text-ink transition-colors p-1"
+            title="Open in new tab"
+          >
+            <ExternalLink className="size-3.5" />
+          </a>
+        ) : (
+          <span className="text-muted/40 p-1" title="Unsafe or invalid URL">
+            <ExternalLink className="size-3.5" />
+          </span>
+        )}
         <button
           type="button"
           disabled={disabled}

@@ -14,6 +14,7 @@ import {
 import { useCrud } from '../lib/useCrud'
 import { PageHeader, ConfirmButton, EmptyState, useToast } from '../components/ui'
 import { deleteProjectStorage } from '../lib/projectStorage'
+import { safeUrl, safeImageUrl } from '../lib/safeUrl'
 import type { ProjectRow } from '../types/rows'
 
 export default function Projects() {
@@ -132,7 +133,6 @@ export default function Projects() {
       ) : (
         <div className="space-y-3">
           {projects.map((project, index) => {
-            const hasCover = Boolean(project.cover_url)
             const docCount = Array.isArray(project.files) ? project.files.length : 0
             const techList = Array.isArray(project.tech) ? project.tech : []
 
@@ -145,9 +145,9 @@ export default function Projects() {
                 <div className="flex items-start gap-4 min-w-0 flex-1">
                   {/* Cover thumbnail */}
                   <div className="w-24 h-16 bg-bg border border-line shrink-0 overflow-hidden flex items-center justify-center">
-                    {hasCover ? (
+                    {safeImageUrl(project.cover_url) ? (
                       <img
-                        src={project.cover_url!}
+                        src={safeImageUrl(project.cover_url)!}
                         alt={project.title}
                         className="w-full h-full object-cover"
                       />
@@ -220,9 +220,9 @@ export default function Projects() {
                 {/* Right: Actions and toggles */}
                 <div className="flex items-center gap-2 self-end md:self-center shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-line w-full md:w-auto justify-end">
                   {/* External links preview if present */}
-                  {project.live_url && (
+                  {safeUrl(project.live_url) ? (
                     <a
-                      href={project.live_url}
+                      href={safeUrl(project.live_url)!}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
@@ -230,7 +230,7 @@ export default function Projects() {
                     >
                       <ExternalLink className="size-3.5" />
                     </a>
-                  )}
+                  ) : null}
 
                   {/* Featured Toggle */}
                   <button

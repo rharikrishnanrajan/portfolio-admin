@@ -9,6 +9,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeUrl } from '../lib/safeUrl'
 import { PageHeader, useToast, ConfirmButton } from '../components/ui'
 import type { MessageRow } from '../types/rows'
 
@@ -217,13 +218,15 @@ export default function Messages() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-3 pt-2 border-t border-line flex-wrap">
-                  <a
-                    href={`mailto:${selected.email}?subject=Re: ${encodeURIComponent(selected.subject ?? 'Your message')}`}
-                    className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
-                  >
-                    <Reply className="size-3.5" />
-                    <span>Reply</span>
-                  </a>
+                  {safeUrl(`mailto:${selected.email}?subject=Re: ${encodeURIComponent(selected.subject ?? 'Your message')}`) ? (
+                    <a
+                      href={safeUrl(`mailto:${selected.email}?subject=Re: ${encodeURIComponent(selected.subject ?? 'Your message')}`)!}
+                      className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
+                    >
+                      <Reply className="size-3.5" />
+                      <span>Reply</span>
+                    </a>
+                  ) : null}
 
                   <button
                     type="button"

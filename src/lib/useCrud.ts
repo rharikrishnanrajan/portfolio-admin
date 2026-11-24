@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
+import { validateTableData } from './schemas'
 
 export interface UseCrudOptions<T> {
   orderBy?: keyof T & string
@@ -67,9 +68,14 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
           rowData.position = rows.length > 0 ? maxPos + 10 : 10
         }
 
+        const validation = validateTableData(table, rowData as Record<string, unknown>, false)
+        if (!validation.success) {
+          throw new Error(validation.error || 'Validation failed')
+        }
+
         const { data, error: insertError } = await supabase
           .from(table)
-          .insert(rowData as unknown as Record<string, unknown>)
+          .insert((validation.data || rowData) as unknown as Record<string, unknown>)
           .select()
 
         if (insertError) throw insertError
@@ -103,9 +109,14 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
           throw new Error('No row was updated. Check the id and your login.')
         }
 
+        const validation = validateTableData(table, updates as Record<string, unknown>, true)
+        if (!validation.success) {
+          throw new Error(validation.error || 'Validation failed')
+        }
+
         const { data, error: updateError } = await supabase
           .from(table)
-          .update(updates as unknown as Record<string, unknown>)
+          .update((validation.data || updates) as unknown as Record<string, unknown>)
           .eq('id', id)
           .select()
 

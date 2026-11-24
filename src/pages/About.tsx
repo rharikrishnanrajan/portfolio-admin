@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCrud } from '../lib/useCrud'
+import { sectionSchema } from '../lib/schemas'
 import {
   PageHeader,
   Field,
@@ -147,6 +148,9 @@ export default function About() {
           .map((h) => ({ label: h.label.trim(), value: h.value.trim() }))
           .filter((h) => h.label || h.value),
       }
+
+      const val = sectionSchema.partial().safeParse({ content: mergedContent })
+      if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
       if (targetId) {
         const { data, error } = await supabase

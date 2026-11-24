@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { isValidUrl } from '../lib/validation'
+import { projectSchema } from '../lib/schemas'
 import {
   PageHeader,
   Field,
@@ -173,9 +174,14 @@ export default function ProjectEditor() {
           position,
         }
 
+        const validated = projectSchema.safeParse(newProjectData)
+        if (!validated.success) {
+          throw new Error(validated.error.issues[0]?.message || 'Validation failed')
+        }
+
         const { data, error } = await supabase
           .from('projects')
-          .insert(newProjectData)
+          .insert(validated.data)
           .select()
           .single()
 
@@ -206,9 +212,14 @@ export default function ProjectEditor() {
           visible: project.visible ?? true,
         }
 
+        const validated = projectSchema.partial().safeParse(updateData)
+        if (!validated.success) {
+          throw new Error(validated.error.issues[0]?.message || 'Validation failed')
+        }
+
         const { data, error } = await supabase
           .from('projects')
-          .update(updateData)
+          .update(validated.data)
           .eq('id', id)
           .select()
 

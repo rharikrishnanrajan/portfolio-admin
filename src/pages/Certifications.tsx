@@ -15,6 +15,7 @@ import { useCrud } from '../lib/useCrud'
 import { extractStoragePath, removeFile } from '../lib/storage'
 import { monthToDbDate, dbDateToMonth, formatMonthDisplay } from '../lib/date'
 import { isValidUrl } from '../lib/validation'
+import { safeUrl } from '../lib/safeUrl'
 import {
   PageHeader,
   Field,
@@ -379,15 +380,17 @@ export default function Certifications() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={credentialUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
-                      title="View PDF"
-                    >
-                      <ExternalLink className="size-4" />
-                    </a>
+                    {safeUrl(credentialUrl) ? (
+                      <a
+                        href={safeUrl(credentialUrl)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
+                        title="View PDF"
+                      >
+                        <ExternalLink className="size-4" />
+                      </a>
+                    ) : null}
                     <button
                       type="button"
                       onClick={handleRemovePdf}
@@ -518,9 +521,9 @@ export default function Certifications() {
                     <div className="flex items-center gap-3 mt-1 flex-wrap text-xs">
                       {dateText && <span className="font-mono text-muted">{dateText}</span>}
 
-                      {item.credential_url && (
+                      {safeUrl(item.credential_url) ? (
                         <a
-                          href={item.credential_url}
+                          href={safeUrl(item.credential_url)!}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
@@ -528,7 +531,7 @@ export default function Certifications() {
                           <span>Credential</span>
                           <ExternalLink className="size-3" />
                         </a>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>

@@ -10,7 +10,8 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { isValidEmail, isValidUrl } from '../lib/validation'
+import { safeUrl } from '../lib/safeUrl'
+import { profileSchema } from '../lib/schemas'
 import { useCrud } from '../lib/useCrud'
 import {
   PageHeader,
@@ -111,25 +112,27 @@ export default function Profile() {
     setProfileError(null)
 
     try {
-      if (!profile.full_name.trim()) throw new Error('Full name is required.')
-      if (profile.email && !isValidEmail(profile.email)) {
-        throw new Error('Please enter a valid email address.')
+      const payload = {
+        full_name: profile.full_name.trim(),
+        headline: profile.headline?.trim() || null,
+        summary: profile.summary?.trim() || null,
+        email: profile.email?.trim() || null,
+        phone: profile.phone?.trim() || null,
+        location: profile.location?.trim() || null,
+        avatar_url: profile.avatar_url || null,
+        resume_url: profile.resume_url || null,
+        show_email: profile.show_email,
+        show_phone: profile.show_phone,
+      }
+
+      const validated = profileSchema.safeParse(payload)
+      if (!validated.success) {
+        throw new Error(validated.error.issues[0]?.message || 'Validation failed')
       }
 
       const { data, error } = await supabase
         .from('profile')
-        .update({
-          full_name: profile.full_name.trim(),
-          headline: profile.headline?.trim() || null,
-          summary: profile.summary?.trim() || null,
-          email: profile.email?.trim() || null,
-          phone: profile.phone?.trim() || null,
-          location: profile.location?.trim() || null,
-          avatar_url: profile.avatar_url || null,
-          resume_url: profile.resume_url || null,
-          show_email: profile.show_email,
-          show_phone: profile.show_phone,
-        })
+        .update(validated.data)
         .eq('id', 1)
         .select()
 
@@ -171,8 +174,8 @@ export default function Profile() {
     try {
       if (!editingSocial.label?.trim()) throw new Error('Label is required.')
       if (!editingSocial.url?.trim()) throw new Error('URL is required.')
-      if (!isValidUrl(editingSocial.url)) {
-        throw new Error('URL must start with http:// or https://')
+      if (!safeUrl(editingSocial.url, { allowMailtoTel: true })) {
+        throw new Error('URL must start with http://, https://, mailto:, or tel:')
       }
 
       await saveSocial({
@@ -344,15 +347,17 @@ export default function Profile() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <a
-                        href={profile.resume_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
-                        title="View resume"
-                      >
-                        <ExternalLink className="size-4" />
-                      </a>
+                      {safeUrl(profile.resume_url) ? (
+                        <a
+                          href={safeUrl(profile.resume_url)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
+                          title="View resume"
+                        >
+                          <ExternalLink className="size-4" />
+                        </a>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setProfile({ ...profile, resume_url: null })}
@@ -548,14 +553,20 @@ export default function Profile() {
                         </span>
                       )}
                     </div>
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-muted hover:text-accent truncate block mt-0.5 font-mono"
-                    >
-                      {item.url}
-                    </a>
+                    {safeUrl(item.url) ? (
+                      <a
+                        href={safeUrl(item.url)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted hover:text-accent truncate block mt-0.5 font-mono"
+                      >
+                        {item.url}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted/60 truncate block mt-0.5 font-mono">
+                        {item.url}
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase'
 import { useCrud } from '../lib/useCrud'
 import { uploadFile, removeFile, safeName } from '../lib/storage'
 import { emptyToNull } from '../lib/validation'
+import { safeUrl, safeImageUrl } from '../lib/safeUrl'
 import {
   PageHeader,
   Field,
@@ -306,6 +307,11 @@ export default function Sections() {
       if (editingContent.type === 'rich_text') {
         newContent = { ...existing, body: richBody }
       } else if (editingContent.type === 'cards') {
+        for (const it of cardItems) {
+          if (it.url && it.url.trim() && !safeUrl(it.url.trim(), { allowMailtoTel: true })) {
+            throw new Error(`Card "${it.title || 'Untitled'}" has an invalid URL. Must start with http://, https://, mailto:, or tel:`)
+          }
+        }
         newContent = {
           ...existing,
           items: cardItems.map((it) => ({
@@ -617,7 +623,7 @@ export default function Sections() {
                 {galleryImages.map((img, i) => (
                   <div key={i} className="border border-line bg-surface">
                     <div className="relative">
-                      <img src={img.url} alt={img.caption || `Image ${i + 1}`}
+                      <img src={safeImageUrl(img.url) || ''} alt={img.caption || `Image ${i + 1}`}
                         className="w-full h-32 object-cover" />
                       <button type="button"
                         onClick={() => void handleRemoveGalleryImage(i)}
