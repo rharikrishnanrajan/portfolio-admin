@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import RequireAdmin from './components/RequireAdmin'
+import RequireMfa from './components/RequireMfa'
 import Layout from './components/Layout'
 
 const Login = lazy(() => import('./pages/Login'))
@@ -18,6 +19,7 @@ const Publications = lazy(() => import('./pages/Publications'))
 const Sections = lazy(() => import('./pages/Sections'))
 const Theme = lazy(() => import('./pages/Theme'))
 const Messages = lazy(() => import('./pages/Messages'))
+const Security = lazy(() => import('./pages/Security'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function PageFallback() {
@@ -35,22 +37,25 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<RequireAdmin />}>
-          <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="about" element={<About />} />
-            <Route path="sections" element={<Sections />} />
-            <Route path="projects" element={<Projects />} />
-            <Route path="projects/new" element={<ProjectEditor />} />
-            <Route path="projects/:id" element={<ProjectEditor />} />
-            <Route path="skills" element={<Skills />} />
-            <Route path="education" element={<Education />} />
-            <Route path="certifications" element={<Certifications />} />
-            <Route path="publications" element={<Publications />} />
-            <Route path="theme" element={<Theme />} />
-            <Route path="messages" element={<Messages />} />
-            <Route path="*" element={<NotFound />} />
+          <Route element={<RequireMfa />}>
+            <Route element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="about" element={<About />} />
+              <Route path="sections" element={<Sections />} />
+              <Route path="projects" element={<Projects />} />
+              <Route path="projects/new" element={<ProjectEditor />} />
+              <Route path="projects/:id" element={<ProjectEditor />} />
+              <Route path="skills" element={<Skills />} />
+              <Route path="education" element={<Education />} />
+              <Route path="certifications" element={<Certifications />} />
+              <Route path="publications" element={<Publications />} />
+              <Route path="theme" element={<Theme />} />
+              <Route path="messages" element={<Messages />} />
+              <Route path="security" element={<Security />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
           </Route>
         </Route>
         <Route path="*" element={<NotFound />} />

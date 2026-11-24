@@ -51,3 +51,29 @@
 
 ### Open Issues
 - None from Phase 3.
+
+---
+
+## Phase 4: Authentication, sessions and MFA
+
+### Files Created / Modified
+- `src/lib/auth.tsx` - modified - Implemented 30-minute idle inactivity timeout with 1-minute warning toast, 2-hour hidden-tab timeout, and global sign-out (signOutAll).
+- `src/pages/Login.tsx` - modified - Standardized generic login error message ("Email or password is incorrect"), and implemented client-side exponential backoff lockout after 3 consecutive failures.
+- `src/components/MfaChallenge.tsx` - created - 6-digit TOTP challenge screen for sessions requiring aal2 authentication.
+- `src/components/RequireMfa.tsx` - created - Authenticator assurance level route guard allowing optional enrolment while enforcing aal2 when a factor is enrolled.
+- `src/pages/Security.tsx` - created - Added /security page to enrol TOTP authenticators, display QR code and secret, verify challenge, list enrolled factors, securely unenroll factors via fresh verification, warning alert regarding lack of recovery codes, and global sign-out button.
+- `src/nav.ts` - modified - Added Security navigation item with Shield icon.
+- `src/App.tsx` - modified - Wired RequireMfa route guard and added /security route.
+- `src/components/Layout.tsx` - modified - Added "Sign out all devices" action in the sidebar.
+- `src/main.tsx` - modified - Placed ToastProvider outside AuthProvider so auth-level session notifications function properly.
+
+### What You Should Test
+1. **Login Generic Error & Backoff:** Enter incorrect credentials on `/login`. Verify error message is always "Email or password is incorrect". After 3 failed attempts, verify the submit button is locked with an active countdown timer.
+2. **MFA Enrolment:** Navigate to `/security` and click "Enrol Authenticator". Scan the QR code with Google Authenticator or 1Password, enter the 6-digit code, and verify it activates.
+3. **MFA Challenge on Login:** Once enrolled, sign out and log back in. Verify you are greeted by the MFA challenge screen before gaining access to the admin dashboard.
+4. **MFA Unenrolment:** On `/security`, click "Remove" on an active factor. Enter the current 6-digit code and verify factor is removed.
+5. **Optional Enrolment:** Ensure accounts without MFA enrolled are NOT blocked and can access all pages normally.
+6. **Global Sign-out:** Click "Sign out of all devices". Verify all active refresh tokens are revoked across sessions.
+
+### Open Issues
+- None from Phase 4.

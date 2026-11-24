@@ -1,6 +1,6 @@
 import {
   Award, BookOpen, FolderKanban, GraduationCap, Info, Layers, LayoutDashboard,
-  Mail, Palette, Settings, User, Wrench, type LucideIcon,
+  Mail, Palette, Settings, Shield, User, Wrench, type LucideIcon,
 } from 'lucide-react'
 
 export const NAV: { to: string; label: string; icon: LucideIcon }[] = [
@@ -16,4 +16,5 @@ export const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/publications', label: 'Publications', icon: BookOpen },
   { to: '/theme', label: 'Theme', icon: Palette },
   { to: '/messages', label: 'Messages', icon: Mail },
+  { to: '/security', label: 'Security', icon: Shield },
 ]

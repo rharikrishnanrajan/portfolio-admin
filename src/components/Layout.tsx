@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 import ErrorBoundary from './ErrorBoundary'
 
 export default function Layout() {
-  const { session, signOut } = useAuth()
+  const { session, signOut, signOutAll } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -75,9 +75,18 @@ export default function Layout() {
       </nav>
       <div className="p-4 border-t border-line">
         <p className="text-xs text-muted truncate mb-3">{session?.user.email}</p>
-        <button onClick={signOut} className="flex items-center gap-2 text-xs text-muted hover:text-ink">
-          <LogOut size={14} /> Sign out
-        </button>
+        <div className="space-y-2">
+          <button onClick={signOut} className="flex items-center gap-2 text-xs text-muted hover:text-ink">
+            <LogOut size={14} /> Sign out
+          </button>
+          <button
+            onClick={signOutAll}
+            className="flex items-center gap-1.5 text-[0.68rem] text-muted/60 hover:text-rose-400 font-mono transition-colors"
+            title="Revoke all active sessions on all browsers"
+          >
+            <span>Sign out all devices</span>
+          </button>
+        </div>
       </div>
     </aside>
   )
