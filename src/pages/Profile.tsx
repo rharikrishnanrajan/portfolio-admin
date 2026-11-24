@@ -12,6 +12,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { safeUrl } from '../lib/safeUrl'
 import { profileSchema } from '../lib/schemas'
+import { extractStoragePath, removeFile } from '../lib/storage'
 import { useCrud } from '../lib/useCrud'
 import {
   PageHeader,
@@ -360,7 +361,19 @@ export default function Profile() {
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => setProfile({ ...profile, resume_url: null })}
+                        onClick={async () => {
+                          if (profile.resume_url) {
+                            const oldPath = extractStoragePath('portfolio', profile.resume_url)
+                            if (oldPath) {
+                              try {
+                                await removeFile('portfolio', oldPath)
+                              } catch (err) {
+                                console.warn('Could not remove resume from storage:', err)
+                              }
+                            }
+                          }
+                          setProfile({ ...profile, resume_url: null })
+                        }}
                         className="p-1.5 border border-line bg-bg text-muted hover:text-rose-400 transition-colors"
                         title="Remove resume"
                       >
@@ -374,7 +387,19 @@ export default function Profile() {
                   bucket="portfolio"
                   folder="resume"
                   accept=".pdf,application/pdf"
-                  onUploaded={(file) => setProfile({ ...profile, resume_url: file.url })}
+                  onUploaded={async (file) => {
+                    if (profile.resume_url && profile.resume_url !== file.url) {
+                      const oldPath = extractStoragePath('portfolio', profile.resume_url)
+                      if (oldPath) {
+                        try {
+                          await removeFile('portfolio', oldPath)
+                        } catch (err) {
+                          console.warn('Could not remove previous resume from storage:', err)
+                        }
+                      }
+                    }
+                    setProfile({ ...profile, resume_url: file.url })
+                  }}
                   hint="Upload your official resume in PDF format (up to 10 MB)"
                 />
               )}

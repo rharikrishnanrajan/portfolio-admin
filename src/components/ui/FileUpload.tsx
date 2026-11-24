@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { AlertCircle, ExternalLink, FileText, Loader2, Upload, X } from 'lucide-react'
-import { safeName, uploadFile } from '../../lib/storage'
+import { safeName, uploadFile, sanitizeStoragePath } from '../../lib/storage'
 import { safeUrl } from '../../lib/safeUrl'
 import type { ProjectFile } from '../../types/rows'
 
@@ -35,7 +35,7 @@ export function FileUpload({
     setUploading(true)
 
     try {
-      const cleanFolder = folder.replace(/^\/+|\/+$/g, '')
+      const cleanFolder = sanitizeStoragePath(folder)
       const fileName = safeName(file.name)
       const path = cleanFolder ? `${cleanFolder}/${fileName}` : fileName
 

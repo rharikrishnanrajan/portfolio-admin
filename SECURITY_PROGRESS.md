@@ -30,3 +30,24 @@
 
 ### Open Issues
 - None from Phase 2.
+
+---
+
+## Phase 3: File upload security
+
+### Files Created / Modified
+- `src/lib/storage.ts` - modified - Added detectFileType() to verify file magic bytes (%PDF-, PNG, JPEG, WebP, AVIF, Office OpenXML DOCX/XLSX/PPTX as ZIP PK); enforced strict extension-to-detected-content matching; rejected SVGs, HTML, JS, and generic archives; enforced file size checks before reading memory; generated names as <uuid>-<safe-slug>.<ext>; added sanitizeStoragePath() to strip path traversal/dots-only segments; and set contentType strictly from detected MIME type.
+- `src/components/ui/ImageUpload.tsx` - modified - Sanitized storage paths, and added automatic purging of old storage objects upon image replacement or removal to prevent orphaned files.
+- `src/components/ui/FileUpload.tsx` - modified - Added sanitizeStoragePath() on folder segments before file upload.
+- `src/pages/Profile.tsx` - modified - Added automatic deletion of previous resume file from storage upon resume removal or replacement.
+- `src/pages/Sections.tsx` - modified - Sanitized section slug in gallery upload path to prevent path traversal or malformed directory names.
+
+### What You Should Test
+1. **Valid Image Uploads:** Upload valid PNG, JPEG, WebP, or AVIF image in `/profile` (avatar) or `/projects` (cover). Verify upload succeeds and preview renders.
+2. **Valid Document Uploads:** Upload a valid PDF or DOCX file in `/projects/:id` (Documents) or resume PDF in `/profile`. Verify upload succeeds.
+3. **Spoofed Extension / Content Rejection:** Rename an `.exe`, `.svg`, or `.txt` file to `.png` or `.pdf` and attempt upload. Verify it is rejected with an error stating unsupported or mismatched content.
+4. **Orphan Purging:** Replace an existing avatar or project cover. Check Supabase Storage to verify the previous file object was removed.
+5. **Filename Entropy:** Inspect the uploaded file URL; confirm it follows the `<uuid>-<safe-slug>.<ext>` convention without containing raw unsanitized user filenames.
+
+### Open Issues
+- None from Phase 3.

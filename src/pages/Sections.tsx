@@ -359,7 +359,8 @@ export default function Sections() {
     if (!file) return
     setGalleryUploading(true)
     try {
-      const path = `sections/${editingContent.slug}/${safeName(file.name)}`
+      const safeSlug = editingContent.slug.replace(/[^a-z0-9_-]+/g, '-')
+      const path = `sections/${safeSlug}/${safeName(file.name)}`
       const { url } = await uploadFile('portfolio', path, file)
       setGalleryImages((prev) => [...prev, { url, path, caption: '' }])
       toast.success('Image uploaded.')

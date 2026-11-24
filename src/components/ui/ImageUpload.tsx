@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { AlertCircle, Image as ImageIcon, Loader2, Upload, X } from 'lucide-react'
-import { safeName, uploadFile } from '../../lib/storage'
+import { safeName, uploadFile, removeFile, extractStoragePath, sanitizeStoragePath } from '../../lib/storage'
 import { safeImageUrl } from '../../lib/safeUrl'
 
 export interface ImageUploadProps {
@@ -49,11 +49,24 @@ export function ImageUpload({
     setUploading(true)
 
     try {
-      const cleanFolder = folder.replace(/^\/+|\/+$/g, '')
+      const cleanFolder = sanitizeStoragePath(folder)
       const fileName = safeName(file.name)
       const path = cleanFolder ? `${cleanFolder}/${fileName}` : fileName
 
       const { url } = await uploadFile(bucket, path, file)
+
+      // Purge previous image to prevent orphaned storage objects
+      if (value && value !== url) {
+        const oldPath = extractStoragePath(bucket, value)
+        if (oldPath) {
+          try {
+            await removeFile(bucket, oldPath)
+          } catch (err) {
+            console.warn('Could not remove previous image from storage:', err)
+          }
+        }
+      }
+
       onChange(url)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -66,8 +79,18 @@ export function ImageUpload({
     }
   }
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
     if (disabled || uploading) return
+    if (value) {
+      const oldPath = extractStoragePath(bucket, value)
+      if (oldPath) {
+        try {
+          await removeFile(bucket, oldPath)
+        } catch (err) {
+          console.warn('Could not remove image from storage:', err)
+        }
+      }
+    }
     onChange(null)
   }
 
