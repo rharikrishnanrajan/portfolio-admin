@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import {
   PageHeader,
   Field,
@@ -91,7 +92,7 @@ export default function Skills() {
       toast.success(editingItem.id ? 'Skill domain updated.' : 'Skill domain created.')
       setEditingItem(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
       formErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -106,7 +107,7 @@ export default function Skills() {
       await remove(id)
       toast.success('Skill domain deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -115,7 +116,7 @@ export default function Skills() {
     try {
       await toggle(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -124,7 +125,7 @@ export default function Skills() {
     try {
       await move(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }

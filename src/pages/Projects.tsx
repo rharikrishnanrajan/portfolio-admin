@@ -12,6 +12,7 @@ import {
   Star,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import { PageHeader, ConfirmButton, EmptyState, useToast } from '../components/ui'
 import { deleteProjectStorage } from '../lib/projectStorage'
 import { safeUrl, safeImageUrl } from '../lib/safeUrl'
@@ -35,7 +36,7 @@ export default function Projects() {
     try {
       await toggle(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to update visibility: ${msg}`)
     }
   }
@@ -44,7 +45,7 @@ export default function Projects() {
     try {
       await toggle(id, 'featured')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to update featured status: ${msg}`)
     }
   }
@@ -53,7 +54,7 @@ export default function Projects() {
     try {
       await move(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to reorder project: ${msg}`)
     }
   }
@@ -67,7 +68,7 @@ export default function Projects() {
       await remove(project.id)
       toast.success('Project and associated storage files deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete project: ${msg}`)
     } finally {
       setDeletingId(null)

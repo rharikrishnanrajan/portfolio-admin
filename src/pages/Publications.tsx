@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import { formatDateDisplay } from '../lib/date'
 import { isValidUrl } from '../lib/validation'
 import { safeUrl } from '../lib/safeUrl'
@@ -111,7 +112,7 @@ export default function Publications() {
       toast.success(editingItem.id ? 'Publication updated.' : 'Publication created.')
       setEditingItem(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
       formErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -126,7 +127,7 @@ export default function Publications() {
       await remove(id)
       toast.success('Publication deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -135,7 +136,7 @@ export default function Publications() {
     try {
       await toggle(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -144,7 +145,7 @@ export default function Publications() {
     try {
       await move(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }

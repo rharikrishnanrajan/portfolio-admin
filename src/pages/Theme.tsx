@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { Loader2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { rgbStringToHex, hexToRgbString, contrastRatio } from '../lib/color'
 import { siteSettingsSchema } from '../lib/schemas'
 import { PageHeader, useToast } from '../components/ui'
@@ -181,6 +183,7 @@ export default function Theme() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const saveErrorRef = useRef<HTMLParagraphElement>(null)
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null)
 
   const [mode, setMode] = useState<'dark' | 'light'>('dark')
   const [headingFont, setHeadingFont] = useState(DEFAULT_THEME.fonts!.heading)
@@ -193,12 +196,16 @@ export default function Theme() {
     setLoading(true)
     setFetchError(null)
     try {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('theme')
-        .eq('id', 1)
-        .single()
+      const { data, error } = await withReadRetry(async (signal) => {
+        return await supabase
+          .from('site_settings')
+          .select('theme, updated_at')
+          .eq('id', 1)
+          .abortSignal(signal)
+          .single()
+      })
       if (error) throw error
+      setLoadedUpdatedAt((data as { updated_at?: string })?.updated_at || null)
       const t = (data?.theme as SiteThemeJson) || {}
       setMode(t.default_mode || 'dark')
       setHeadingFont(t.fonts?.heading || DEFAULT_THEME.fonts!.heading)
@@ -206,7 +213,7 @@ export default function Theme() {
       setDark({ ...DEFAULT_DARK, ...(t.dark || {}) })
       setLight({ ...DEFAULT_LIGHT, ...(t.light || {}) })
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err))
+      setFetchError(friendlyErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -242,7 +249,7 @@ export default function Theme() {
       // Merge into existing theme JSON
       const { data: current, error: fetchErr } = await supabase
         .from('site_settings')
-        .select('theme')
+        .select('theme, updated_at')
         .eq('id', 1)
         .single()
       if (fetchErr) throw fetchErr
@@ -259,16 +266,29 @@ export default function Theme() {
       const val = siteSettingsSchema.partial().safeParse({ theme: merged })
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('site_settings')
         .update({ theme: merged })
         .eq('id', 1)
-        .select()
+
+      const targetUpdatedAt = (current as { updated_at?: string })?.updated_at || loadedUpdatedAt
+      if (targetUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', targetUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
       if (error) throw error
-      if (!data || data.length === 0) throw new Error('No row updated. Check permissions.')
+      if (!data || data.length === 0) {
+        if (targetUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
+        throw new Error('No row updated. Check permissions.')
+      }
+
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('Theme saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setSaveError(msg)
       toast.error(msg)
       saveErrorRef.current?.scrollIntoView({ block: 'center' })

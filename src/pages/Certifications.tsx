@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import { extractStoragePath, removeFile } from '../lib/storage'
 import { monthToDbDate, dbDateToMonth, formatMonthDisplay } from '../lib/date'
 import { isValidUrl } from '../lib/validation'
@@ -174,6 +175,7 @@ export default function Certifications() {
       }
 
       const payload: Partial<CertificationRow> = {
+        ...editingItem,
         title: editingItem.title.trim(),
         issuer: editingItem.issuer.trim(),
         start_date: dbStartDate,
@@ -181,13 +183,6 @@ export default function Certifications() {
         credential_url: finalCredentialUrl,
         featured: editingItem.featured ?? false,
         visible: editingItem.visible ?? true,
-      }
-
-      if (editingItem.id) {
-        payload.id = editingItem.id
-      }
-      if (editingItem.position !== undefined) {
-        payload.position = editingItem.position
       }
 
       const savedRow = await save(payload)
@@ -200,7 +195,7 @@ export default function Certifications() {
       setEditingItem(null)
       setCredentialUrl('')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
       formErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -219,7 +214,7 @@ export default function Certifications() {
       await remove(cert.id)
       toast.success('Certification deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -228,7 +223,7 @@ export default function Certifications() {
     try {
       await toggle(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -237,7 +232,7 @@ export default function Certifications() {
     try {
       await toggle(id, 'featured')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -246,7 +241,7 @@ export default function Certifications() {
     try {
       await move(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }

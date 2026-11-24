@@ -7,6 +7,8 @@ import {
   Lock,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { isValidUrl } from '../lib/validation'
 import { projectSchema } from '../lib/schemas'
 import {
@@ -66,14 +68,17 @@ export default function ProjectEditor() {
       setFormError(null)
       setNotFound(false)
       try {
-        const { data, error } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('id', id)
-          .single()
+        const { data, error } = await withReadRetry(async (signal) => {
+          return await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', id)
+            .abortSignal(signal)
+            .single()
+        })
 
         if (error) {
-          if (error.code === 'PGRST116') {
+          if ((error as { code?: string }).code === 'PGRST116') {
             setNotFound(true)
             return
           }
@@ -217,14 +222,22 @@ export default function ProjectEditor() {
           throw new Error(validated.error.issues[0]?.message || 'Validation failed')
         }
 
-        const { data, error } = await supabase
+        let updateQuery = supabase
           .from('projects')
           .update(validated.data)
           .eq('id', id)
-          .select()
+
+        if (project.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', project.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
 
         if (error) throw error
         if (!data || data.length === 0) {
+          if (project.updated_at) {
+            throw new Error('This item was changed elsewhere. Reload and try again.')
+          }
           throw new Error('No row was updated. Check the id and your login.')
         }
 
@@ -233,7 +246,7 @@ export default function ProjectEditor() {
         toast.success('Project saved successfully.')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
       formErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -258,20 +271,29 @@ export default function ProjectEditor() {
 
     // If persisted row exists, update row in database immediately
     if (project.id) {
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('projects')
         .update({ cover_url: newUrl })
         .eq('id', project.id)
-        .select()
+
+      if (project.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', project.updated_at)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) {
-        toast.error(`Failed to update cover URL: ${error.message}`)
+        toast.error(`Failed to update cover URL: ${friendlyErrorMessage(error)}`)
       } else if (!data || data.length === 0) {
-        toast.error('Failed to update cover URL: No row was updated.')
-      } else if (!newUrl) {
-        toast.info('Cover image removed from storage.')
+        toast.error('Failed to update cover URL: This item was changed elsewhere.')
       } else {
-        toast.success('Cover image updated.')
+        const updatedRow = data[0] as ProjectRow
+        setProject((prev) => ({ ...prev, ...updatedRow }))
+        if (!newUrl) {
+          toast.info('Cover image removed from storage.')
+        } else {
+          toast.success('Cover image updated.')
+        }
       }
     }
   }
@@ -282,17 +304,24 @@ export default function ProjectEditor() {
     setProject((prev) => ({ ...prev, files: nextFiles }))
 
     if (project.id) {
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('projects')
         .update({ files: nextFiles })
         .eq('id', project.id)
-        .select()
+
+      if (project.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', project.updated_at)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) {
-        toast.error(`Failed to update files in database: ${error.message}`)
+        toast.error(`Failed to update files in database: ${friendlyErrorMessage(error)}`)
       } else if (!data || data.length === 0) {
-        toast.error('Failed to update files in database: No row was updated.')
+        toast.error('Failed to update files in database: This item was changed elsewhere.')
       } else {
+        const updatedRow = data[0] as ProjectRow
+        setProject((prev) => ({ ...prev, ...updatedRow }))
         toast.success(`Attached "${newFile.name}".`)
       }
     }
@@ -306,20 +335,27 @@ export default function ProjectEditor() {
       setProject((prev) => ({ ...prev, files: nextFiles }))
 
       if (project.id) {
-        const { data, error } = await supabase
+        let updateQuery = supabase
           .from('projects')
           .update({ files: nextFiles })
           .eq('id', project.id)
-          .select()
+
+        if (project.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', project.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
 
         if (error) throw error
         if (!data || data.length === 0) {
-          throw new Error('No row was updated. Check your permissions and try again.')
+          throw new Error('This item was changed elsewhere. Reload and try again.')
         }
+        const updatedRow = data[0] as ProjectRow
+        setProject((prev) => ({ ...prev, ...updatedRow }))
       }
       toast.success(`Removed "${fileToRemove.name}" from storage.`)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to remove document: ${msg}`)
     }
   }
@@ -343,7 +379,7 @@ export default function ProjectEditor() {
       toast.success('Project deleted.')
       navigate('/projects')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete project: ${msg}`)
     }
   }

@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import {
   PageHeader,
   Field,
@@ -102,7 +103,7 @@ export default function Education() {
       toast.success(editingItem.id ? 'Education entry updated.' : 'Education entry created.')
       setEditingItem(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
       formErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -117,7 +118,7 @@ export default function Education() {
       await remove(id)
       toast.success('Education entry deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -126,7 +127,7 @@ export default function Education() {
     try {
       await toggle(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -135,7 +136,7 @@ export default function Education() {
     try {
       await move(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Home } from 'lucide-react'
 
 interface Props {
   children: ReactNode
@@ -20,30 +20,48 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Log to console for debugging; replace with a monitoring service if needed
-    console.error('[ErrorBoundary]', error, info.componentStack)
+    if (import.meta.env.DEV) {
+      console.error('[ErrorBoundary]', error, info.componentStack)
+    }
   }
 
   handleReset = () => {
     this.setState({ error: null })
   }
 
+  handleGoHome = () => {
+    window.location.href = '/'
+  }
+
   render() {
     if (this.state.error) {
       return (
-        <div className="p-8 text-center max-w-lg mx-auto">
-          <AlertTriangle className="size-10 text-rose-400 mx-auto mb-4" />
-          <p className="eyebrow text-rose-400 mb-2">Something went wrong</p>
-          <p className="text-sm text-muted mb-4 font-mono break-all">
-            {this.state.error.message}
-          </p>
-          <button
-            type="button"
-            onClick={this.handleReset}
-            className="btn-primary"
-          >
-            Try again
-          </button>
+        <div className="min-h-screen bg-bg text-ink flex items-center justify-center p-6">
+          <div className="card p-8 text-center max-w-md w-full border-line space-y-4">
+            <AlertTriangle className="size-10 text-rose-400 mx-auto" />
+            <h1 className="text-lg font-bold text-ink">Something went wrong</h1>
+            <p className="text-xs text-muted leading-relaxed">
+              An unexpected error occurred while rendering this page. You can try refreshing the view or returning to the dashboard.
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={this.handleReset}
+                className="btn-primary flex items-center gap-2 text-xs py-2 px-3.5"
+              >
+                <RotateCcw className="size-3.5" />
+                <span>Try again</span>
+              </button>
+              <button
+                type="button"
+                onClick={this.handleGoHome}
+                className="btn-secondary flex items-center gap-2 text-xs py-2 px-3.5"
+              >
+                <Home className="size-3.5" />
+                <span>Go to Dashboard</span>
+              </button>
+            </div>
+          </div>
         </div>
       )
     }

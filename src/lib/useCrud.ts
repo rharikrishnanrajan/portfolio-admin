@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { validateTableData } from './schemas'
+import { withReadRetry } from './db'
+import { friendlyErrorMessage } from './errors'
 
 export interface UseCrudOptions<T> {
   orderBy?: keyof T & string
@@ -31,15 +33,16 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
     setLoading(true)
     setError(null)
     try {
-      let query = supabase.from(table).select('*')
-      if (orderBy) {
-        query = query.order(orderBy, { ascending })
-      }
-      const { data, error: fetchError } = await query
-      if (fetchError) throw fetchError
+      const { data } = await withReadRetry(async (signal) => {
+        let query = supabase.from(table).select('*').abortSignal(signal)
+        if (orderBy) {
+          query = query.order(orderBy, { ascending })
+        }
+        return await query
+      })
       setRows((data as unknown as T[]) || [])
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = friendlyErrorMessage(err)
       setError(message)
     } finally {
       setLoading(false)
@@ -102,6 +105,7 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
         })
         return savedRow
       } else {
+        const loadedUpdatedAt = (row as Record<string, unknown>).updated_at as string | undefined
         const { id, ...updates } = row
         delete (updates as Record<string, unknown>).updated_at
 
@@ -114,14 +118,22 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
           throw new Error(validation.error || 'Validation failed')
         }
 
-        const { data, error: updateError } = await supabase
+        let updateQuery = supabase
           .from(table)
           .update((validation.data || updates) as unknown as Record<string, unknown>)
           .eq('id', id)
-          .select()
+
+        if (loadedUpdatedAt) {
+          updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+        }
+
+        const { data, error: updateError } = await updateQuery.select()
 
         if (updateError) throw updateError
         if (!data || data.length === 0) {
+          if (loadedUpdatedAt) {
+            throw new Error('This item was changed elsewhere. Reload and try again.')
+          }
           throw new Error('No row was updated. Check the id and your login.')
         }
 
@@ -168,8 +180,8 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
       }
 
       const [res1, res2] = await Promise.all([
-        supabase.from(table).update({ position: nextCurrentPos }).eq('id', current.id),
-        supabase.from(table).update({ position: nextNeighborPos }).eq('id', neighbor.id),
+        supabase.from(table).update({ position: nextCurrentPos }).eq('id', current.id).select(),
+        supabase.from(table).update({ position: nextNeighborPos }).eq('id', neighbor.id).select(),
       ])
 
       if (res1.error) throw res1.error
@@ -177,8 +189,8 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
 
       setRows((prev) => {
         const copy = [...prev]
-        copy[idx] = { ...current, position: nextCurrentPos }
-        copy[neighborIdx] = { ...neighbor, position: nextNeighborPos }
+        copy[idx] = (res1.data?.[0] as unknown as T) || { ...current, position: nextCurrentPos }
+        copy[neighborIdx] = (res2.data?.[0] as unknown as T) || { ...neighbor, position: nextNeighborPos }
         return copy.sort((a, b) => {
           const posA = typeof a.position === 'number' ? a.position : 0
           const posB = typeof b.position === 'number' ? b.position : 0
@@ -196,19 +208,30 @@ export function useCrud<T extends { id?: string | number; position?: number }>(
       if (!current) return
 
       const nextValue = !current[field]
-      const { data, error: toggleError } = await supabase
+      const loadedUpdatedAt = (current as Record<string, unknown>).updated_at as string | undefined
+
+      let updateQuery = supabase
         .from(table)
         .update({ [field]: nextValue })
         .eq('id', id)
-        .select()
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error: toggleError } = await updateQuery.select()
 
       if (toggleError) throw toggleError
       if (!data || data.length === 0) {
+        if (loadedUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check the id and your login.')
       }
 
+      const savedRow = data[0] as unknown as T
       setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, [field]: nextValue } : r))
+        prev.map((r) => (r.id === id ? savedRow : r))
       )
     },
     [rows, table]

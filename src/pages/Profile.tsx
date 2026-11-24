@@ -10,6 +10,8 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { safeUrl } from '../lib/safeUrl'
 import { profileSchema } from '../lib/schemas'
 import { extractStoragePath, removeFile } from '../lib/storage'
@@ -45,6 +47,7 @@ export default function Profile() {
     show_email: true,
     show_phone: false,
   })
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -72,15 +75,19 @@ export default function Profile() {
     setLoadingProfile(true)
     setProfileError(null)
     try {
-      const { data, error } = await supabase
-        .from('profile')
-        .select('*')
-        .eq('id', 1)
-        .single()
+      const { data, error } = await withReadRetry(async (signal) => {
+        return await supabase
+          .from('profile')
+          .select('*')
+          .eq('id', 1)
+          .abortSignal(signal)
+          .single()
+      })
 
       if (error) throw error
       const row = data as unknown as ProfileRow
 
+      setLoadedUpdatedAt(row.updated_at || null)
       setProfile({
         id: 1,
         full_name: row.full_name || '',
@@ -95,7 +102,7 @@ export default function Profile() {
         show_phone: row.show_phone ?? false,
       })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setProfileError(msg)
     } finally {
       setLoadingProfile(false)
@@ -131,19 +138,29 @@ export default function Profile() {
         throw new Error(validated.error.issues[0]?.message || 'Validation failed')
       }
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('profile')
         .update(validated.data)
         .eq('id', 1)
-        .select()
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) throw error
       if (!data || data.length === 0) {
+        if (loadedUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check your permissions and try again.')
       }
+
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('Profile updated successfully.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setProfileError(msg)
       toast.error(msg)
       profileErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -188,7 +205,7 @@ export default function Profile() {
       toast.success(editingSocial.id ? 'Social link updated.' : 'Social link created.')
       setEditingSocial(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setSocialFormError(msg)
       toast.error(msg)
       socialErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -204,7 +221,7 @@ export default function Profile() {
       await removeSocial(id)
       toast.success('Social link removed.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -214,7 +231,7 @@ export default function Profile() {
     try {
       await toggleSocial(id, 'visible')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }
@@ -224,7 +241,7 @@ export default function Profile() {
     try {
       await moveSocial(id, direction)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(msg)
     }
   }

@@ -9,6 +9,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { safeUrl } from '../lib/safeUrl'
 import { PageHeader, useToast, ConfirmButton } from '../components/ui'
 import type { MessageRow } from '../types/rows'
@@ -35,14 +37,17 @@ export default function Messages() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error: err } = await withReadRetry(async (signal) => {
+        return await supabase
+          .from('messages')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .abortSignal(signal)
+      })
       if (err) throw err
       setMessages((data as unknown as MessageRow[]) ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -69,7 +74,7 @@ export default function Messages() {
       )
       if (selected?.id === id) setSelected((s) => s ? { ...s, is_read } : s)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      toast.error(friendlyErrorMessage(err))
     }
   }
 
@@ -81,7 +86,7 @@ export default function Messages() {
       if (selected?.id === id) setSelected(null)
       toast.success('Message deleted.')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
+      toast.error(friendlyErrorMessage(err))
     }
   }
 

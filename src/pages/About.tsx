@@ -10,6 +10,8 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { useCrud } from '../lib/useCrud'
 import { sectionSchema } from '../lib/schemas'
 import {
@@ -78,11 +80,14 @@ export default function About() {
       setLoadingSection(true)
       setSectionError(null)
       try {
-        const { data, error } = await supabase
-          .from('sections')
-          .select('*')
-          .eq('slug', 'about')
-          .maybeSingle()
+        const { data, error } = await withReadRetry(async (signal) => {
+          return await supabase
+            .from('sections')
+            .select('*')
+            .eq('slug', 'about')
+            .abortSignal(signal)
+            .maybeSingle()
+        })
 
         if (error) throw error
 
@@ -107,7 +112,7 @@ export default function About() {
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = friendlyErrorMessage(err)
         setSectionError(msg)
       } finally {
         setLoadingSection(false)
@@ -153,16 +158,25 @@ export default function About() {
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
       if (targetId) {
-        const { data, error } = await supabase
+        let updateQuery = supabase
           .from('sections')
           .update({ content: mergedContent })
           .eq('id', targetId)
-          .select()
+
+        if (fresh?.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', fresh.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
 
         if (error) throw error
         if (!data || data.length === 0) {
+          if (fresh?.updated_at) {
+            throw new Error('This item was changed elsewhere. Reload and try again.')
+          }
           throw new Error('No row was updated. Check your permissions and try again.')
         }
+        setSectionRow(data[0] as SectionRow)
       } else {
         const { data: created, error } = await supabase
           .from('sections')
@@ -188,7 +202,7 @@ export default function About() {
 
       toast.success('About section content saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setSectionError(msg)
       toast.error(msg)
       sectionErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -258,7 +272,7 @@ export default function About() {
       toast.success(editingOverview.id ? 'Overview row updated.' : 'Overview row created.')
       setEditingOverview(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setOverviewFormError(msg)
       toast.error(msg)
       overviewErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -273,7 +287,7 @@ export default function About() {
       await removeOverview(id)
       toast.success('Overview row deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -303,7 +317,7 @@ export default function About() {
       toast.success(editingCompetency.id ? 'Competency updated.' : 'Competency created.')
       setEditingCompetency(null)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setCompetencyFormError(msg)
       toast.error(msg)
       competencyErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -318,7 +332,7 @@ export default function About() {
       await removeCompetency(id)
       toast.success('Competency deleted.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }

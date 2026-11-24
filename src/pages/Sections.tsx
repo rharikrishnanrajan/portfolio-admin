@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCrud } from '../lib/useCrud'
+import { friendlyErrorMessage } from '../lib/errors'
 import { uploadFile, removeFile, safeName } from '../lib/storage'
 import { emptyToNull } from '../lib/validation'
 import { safeUrl, safeImageUrl } from '../lib/safeUrl'
@@ -131,7 +132,7 @@ export default function Sections() {
     setSavingMeta(true)
     setMetaError(null)
     try {
-      const { data, error: err } = await supabase
+      let updateQuery = supabase
         .from('sections')
         .update({
           nav_label: emptyToNull(metaNavLabel),
@@ -140,14 +141,24 @@ export default function Sections() {
           subtitle: emptyToNull(metaSubtitle),
         })
         .eq('id', editingMeta.id)
-        .select()
+
+      if (editingMeta.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', editingMeta.updated_at)
+      }
+
+      const { data, error: err } = await updateQuery.select()
       if (err) throw err
-      if (!data || data.length === 0) throw new Error('No row updated. Check permissions.')
+      if (!data || data.length === 0) {
+        if (editingMeta.updated_at) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
+        throw new Error('No row updated. Check permissions.')
+      }
       toast.success('Section metadata saved.')
       setEditingMeta(null)
       await reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setMetaError(msg)
       toast.error(msg)
       metaErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -223,7 +234,7 @@ export default function Sections() {
       setNewType('rich_text')
       await reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setNewError(msg); toast.error(msg)
       newErrorRef.current?.scrollIntoView({ block: 'center' })
       setTimeout(() => newErrorRef.current?.scrollIntoView({ block: 'center' }), 0)
@@ -251,7 +262,7 @@ export default function Sections() {
       toast.success('Section deleted.')
       await reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       toast.error(`Failed to delete: ${msg}`)
     }
   }
@@ -259,15 +270,15 @@ export default function Sections() {
   // ---- Toggle handlers ----
   const handleToggleVisible = async (id: string) => {
     try { await toggle(id, 'visible') }
-    catch (err) { toast.error(err instanceof Error ? err.message : String(err)) }
+    catch (err) { toast.error(friendlyErrorMessage(err)) }
   }
   const handleToggleNav = async (id: string) => {
     try { await toggle(id, 'show_in_nav') }
-    catch (err) { toast.error(err instanceof Error ? err.message : String(err)) }
+    catch (err) { toast.error(friendlyErrorMessage(err)) }
   }
   const handleMove = async (id: string, dir: 'up' | 'down') => {
     try { await move(id, dir) }
-    catch (err) { toast.error(err instanceof Error ? err.message : String(err)) }
+    catch (err) { toast.error(friendlyErrorMessage(err)) }
   }
 
   // ---- Content editor ----
@@ -332,18 +343,28 @@ export default function Sections() {
         }
       }
 
-      const { data, error: err } = await supabase
+      let updateQuery = supabase
         .from('sections')
         .update({ content: newContent })
         .eq('id', editingContent.id)
-        .select()
+
+      if (editingContent.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', editingContent.updated_at)
+      }
+
+      const { data, error: err } = await updateQuery.select()
       if (err) throw err
-      if (!data || data.length === 0) throw new Error('No row updated.')
+      if (!data || data.length === 0) {
+        if (editingContent.updated_at) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
+        throw new Error('No row updated.')
+      }
       toast.success('Section content saved.')
       setEditingContent(null)
       await reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setContentError(msg); toast.error(msg)
       contentErrorRef.current?.scrollIntoView({ block: 'center' })
       setTimeout(() => contentErrorRef.current?.scrollIntoView({ block: 'center' }), 0)

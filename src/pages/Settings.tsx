@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, Download, Upload, FileJson } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withReadRetry } from '../lib/db'
+import { friendlyErrorMessage } from '../lib/errors'
 import { isValidUrl } from '../lib/validation'
 import { siteSettingsSchema } from '../lib/schemas'
 import { PageHeader, Field, TextArea, TagInput, useToast } from '../components/ui'
@@ -39,6 +41,7 @@ export default function Settings() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null)
 
   // ── Export / Import state ──────────────────────────────────────
   const [exporting, setExporting] = useState(false)
@@ -168,14 +171,18 @@ export default function Settings() {
     setLoading(true)
     setFetchError(null)
     try {
-      const { data, error } = await supabase
-        .from('site_settings')
-        .select('*')
-        .eq('id', 1)
-        .single()
+      const { data, error } = await withReadRetry(async (signal) => {
+        return await supabase
+          .from('site_settings')
+          .select('*')
+          .eq('id', 1)
+          .abortSignal(signal)
+          .single()
+      })
 
       if (error) throw error
       const row = data as unknown as SiteSettingsRow
+      setLoadedUpdatedAt(row.updated_at || null)
 
       setBrand({
         brand_name: row.brand_name || '',
@@ -216,7 +223,7 @@ export default function Settings() {
         description: seoData.description || '',
       })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFetchError(msg)
     } finally {
       setLoading(false)
@@ -244,7 +251,7 @@ export default function Settings() {
       })
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('site_settings')
         .update({
           brand_name: brand.brand_name.trim(),
@@ -252,16 +259,25 @@ export default function Settings() {
           nav_cta_label: brand.nav_cta_label.trim(),
         })
         .eq('id', 1)
-        .select()
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) throw error
       if (!data || data.length === 0) {
+        if (loadedUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check your permissions and try again.')
       }
 
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('Brand settings saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setBrandError(msg)
       toast.error(msg)
       brandErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -296,7 +312,7 @@ export default function Settings() {
       // Merge into latest hero JSON to preserve unknown keys
       const { data: latest, error: fetchErr } = await supabase
         .from('site_settings')
-        .select('hero')
+        .select('hero, updated_at')
         .eq('id', 1)
         .single()
       if (fetchErr) throw fetchErr
@@ -310,20 +326,30 @@ export default function Settings() {
       const val = siteSettingsSchema.partial().safeParse({ hero: mergedHero })
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('site_settings')
         .update({ hero: mergedHero })
         .eq('id', 1)
-        .select()
+
+      const targetUpdatedAt = (latest as { updated_at?: string })?.updated_at || loadedUpdatedAt
+      if (targetUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', targetUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) throw error
       if (!data || data.length === 0) {
+        if (targetUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check your permissions and try again.')
       }
 
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('Hero settings saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setHeroError(msg)
       toast.error(msg)
       heroErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -342,7 +368,7 @@ export default function Settings() {
     try {
       const { data: latest, error: fetchErr } = await supabase
         .from('site_settings')
-        .select('footer')
+        .select('footer, updated_at')
         .eq('id', 1)
         .single()
       if (fetchErr) throw fetchErr
@@ -356,20 +382,30 @@ export default function Settings() {
       const val = siteSettingsSchema.partial().safeParse({ footer: mergedFooter })
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('site_settings')
         .update({ footer: mergedFooter })
         .eq('id', 1)
-        .select()
+
+      const targetUpdatedAt = (latest as { updated_at?: string })?.updated_at || loadedUpdatedAt
+      if (targetUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', targetUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) throw error
       if (!data || data.length === 0) {
+        if (targetUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check your permissions and try again.')
       }
 
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('Footer settings saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setFooterError(msg)
       toast.error(msg)
       footerErrorRef.current?.scrollIntoView({ block: 'center' })
@@ -388,7 +424,7 @@ export default function Settings() {
     try {
       const { data: latest, error: fetchErr } = await supabase
         .from('site_settings')
-        .select('seo')
+        .select('seo, updated_at')
         .eq('id', 1)
         .single()
       if (fetchErr) throw fetchErr
@@ -402,20 +438,30 @@ export default function Settings() {
       const val = siteSettingsSchema.partial().safeParse({ seo: mergedSeo })
       if (!val.success) throw new Error(val.error.issues[0]?.message || 'Validation failed')
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from('site_settings')
         .update({ seo: mergedSeo })
         .eq('id', 1)
-        .select()
+
+      const targetUpdatedAt = (latest as { updated_at?: string })?.updated_at || loadedUpdatedAt
+      if (targetUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', targetUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
 
       if (error) throw error
       if (!data || data.length === 0) {
+        if (targetUpdatedAt) {
+          throw new Error('This item was changed elsewhere. Reload and try again.')
+        }
         throw new Error('No row was updated. Check your permissions and try again.')
       }
 
+      setLoadedUpdatedAt(data[0].updated_at)
       toast.success('SEO settings saved.')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = friendlyErrorMessage(err)
       setSeoError(msg)
       toast.error(msg)
       seoErrorRef.current?.scrollIntoView({ block: 'center' })
