@@ -7,7 +7,7 @@ export interface ImageUploadProps {
   bucket?: string
   folder?: string
   value?: string | null
-  onChange: (url: string | null) => void
+  onChange: (url: string | null) => Promise<void> | void
   label?: string
   disabled?: boolean
   hint?: string
@@ -47,16 +47,36 @@ export function ImageUpload({
     }
 
     setUploading(true)
+    let uploadedUrl: string | null = null
+    let uploadedPath: string | null = null
 
     try {
       const cleanFolder = sanitizeStoragePath(folder)
       const fileName = safeName(file.name)
       const path = cleanFolder ? `${cleanFolder}/${fileName}` : fileName
 
-      const { url } = await uploadFile(bucket, path, file)
+      // 1) Upload the new file
+      const uploadResult = await uploadFile(bucket, path, file)
+      uploadedUrl = uploadResult.url
+      uploadedPath = uploadResult.path
 
-      // Purge previous image to prevent orphaned storage objects
-      if (value && value !== url) {
+      // 2) Save the row with the new URL (and confirm a row was returned)
+      try {
+        await onChange(uploadedUrl)
+      } catch (saveErr) {
+        // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+        if (uploadedPath) {
+          try {
+            await removeFile(bucket, uploadedPath)
+          } catch (cleanupErr) {
+            console.warn('Could not clean up newly uploaded file after save failure:', cleanupErr)
+          }
+        }
+        throw saveErr
+      }
+
+      // 3) Only then delete the old file
+      if (value && value !== uploadedUrl) {
         const oldPath = extractStoragePath(bucket, value)
         if (oldPath) {
           try {
@@ -66,8 +86,6 @@ export function ImageUpload({
           }
         }
       }
-
-      onChange(url)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
@@ -81,17 +99,30 @@ export function ImageUpload({
 
   const handleRemove = async () => {
     if (disabled || uploading) return
-    if (value) {
-      const oldPath = extractStoragePath(bucket, value)
-      if (oldPath) {
-        try {
-          await removeFile(bucket, oldPath)
-        } catch (err) {
-          console.warn('Could not remove image from storage:', err)
+    const oldValue = value
+    setUploading(true)
+    setError(null)
+    try {
+      // 1) Save the row with the URL cleared (and confirm a row was returned)
+      await onChange(null)
+
+      // 2) Deleting a file via a Remove button must also happen only after the row is saved with the URL cleared
+      if (oldValue) {
+        const oldPath = extractStoragePath(bucket, oldValue)
+        if (oldPath) {
+          try {
+            await removeFile(bucket, oldPath)
+          } catch (err) {
+            console.warn('Could not remove image from storage:', err)
+          }
         }
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+    } finally {
+      setUploading(false)
     }
-    onChange(null)
   }
 
   return (

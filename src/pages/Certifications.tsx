@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { supabase } from '../lib/supabase'
 import { friendlyErrorMessage } from '../lib/errors'
 import { extractStoragePath, removeFile } from '../lib/storage'
 import { monthToDbDate, dbDateToMonth, formatMonthDisplay } from '../lib/date'
@@ -101,22 +102,93 @@ export default function Certifications() {
 
   // Handle uploaded credential PDF
   const handlePdfUploaded = async (file: ProjectFile) => {
-    // If an old credential PDF was in storage, delete it
-    if (credentialUrl && credentialUrl !== file.url && extractStoragePath('portfolio', credentialUrl)) {
-      await deleteStoragePdf(credentialUrl)
-    }
+    const oldUrl = credentialUrl
 
-    setCredentialUrl(file.url)
-    toast.success('Credential PDF uploaded and URL updated.')
+    if (editingItem?.id) {
+      try {
+        // 2) save row with new URL (and confirm a row was returned)
+        let updateQuery = supabase
+          .from('certifications')
+          .update({ credential_url: file.url })
+          .eq('id', editingItem.id)
+
+        if (editingItem.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', editingItem.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
+        if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('Failed to update certification row.')
+        }
+
+        const updatedRow = data[0] as CertificationRow
+        setEditingItem(updatedRow)
+        setCredentialUrl(file.url)
+
+        // 3) only then delete the old file
+        if (oldUrl && oldUrl !== file.url && extractStoragePath('portfolio', oldUrl)) {
+          await deleteStoragePdf(oldUrl)
+        }
+
+        toast.success('Credential PDF uploaded and saved.')
+      } catch (err) {
+        // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+        await deleteStoragePdf(file.url)
+        const msg = friendlyErrorMessage(err)
+        toast.error(`Failed to update credential PDF: ${msg}`)
+        throw err
+      }
+    } else {
+      setCredentialUrl(file.url)
+      toast.success('Credential PDF uploaded.')
+    }
   }
 
-  // Handle remove credential PDF
+  // Handle remove credential PDF (deleting only after row is saved with URL cleared)
   const handleRemovePdf = async () => {
-    if (credentialUrl) {
-      await deleteStoragePdf(credentialUrl)
+    const oldUrl = credentialUrl
+    if (!oldUrl) return
+
+    if (editingItem?.id) {
+      try {
+        // 1) save row with URL cleared (and confirm a row was returned)
+        let updateQuery = supabase
+          .from('certifications')
+          .update({ credential_url: null })
+          .eq('id', editingItem.id)
+
+        if (editingItem.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', editingItem.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
+        if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('Failed to update certification row.')
+        }
+
+        const updatedRow = data[0] as CertificationRow
+        setEditingItem(updatedRow)
+        setCredentialUrl('')
+
+        // 2) Deleting a file via a Remove button must also happen only after the row is saved with the URL cleared
+        if (extractStoragePath('portfolio', oldUrl)) {
+          await deleteStoragePdf(oldUrl)
+        }
+
+        toast.info('Credential PDF removed.')
+      } catch (err) {
+        const msg = friendlyErrorMessage(err)
+        toast.error(`Failed to remove credential PDF: ${msg}`)
+      }
+    } else {
+      if (extractStoragePath('portfolio', oldUrl)) {
+        await deleteStoragePdf(oldUrl)
+      }
+      setCredentialUrl('')
+      toast.info('Credential PDF removed.')
     }
-    setCredentialUrl('')
-    toast.info('Credential PDF removed from storage.')
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -160,19 +232,12 @@ export default function Certifications() {
     }
 
     setSavingItem(true)
+    const oldStorageUrl = editingItem.credential_url
+    const finalCredentialUrl = trimmedUrl || null
+
     try {
       const dbStartDate = monthToDbDate(startMonth)
       const dbEndDate = monthToDbDate(endMonth)
-      const finalCredentialUrl = trimmedUrl || null
-
-      // If user changed or cleared an existing storage PDF, clean it up from storage
-      if (
-        editingItem.credential_url &&
-        editingItem.credential_url !== finalCredentialUrl &&
-        extractStoragePath('portfolio', editingItem.credential_url)
-      ) {
-        await deleteStoragePdf(editingItem.credential_url)
-      }
 
       const payload: Partial<CertificationRow> = {
         ...editingItem,
@@ -185,16 +250,30 @@ export default function Certifications() {
         visible: editingItem.visible ?? true,
       }
 
+      // 2) save row (and confirm row returned)
       const savedRow = await save(payload)
 
       if (!savedRow) {
         throw new Error('No row was updated. Check the id and your login.')
       }
 
+      // 3) only then delete old file
+      if (
+        oldStorageUrl &&
+        oldStorageUrl !== finalCredentialUrl &&
+        extractStoragePath('portfolio', oldStorageUrl)
+      ) {
+        await deleteStoragePdf(oldStorageUrl)
+      }
+
       toast.success(editingItem.id ? 'Certification updated.' : 'Certification created.')
       setEditingItem(null)
       setCredentialUrl('')
     } catch (err) {
+      // If saving a new cert failed, and a new storage PDF was uploaded, delete the new PDF so it is not orphaned
+      if (!editingItem.id && finalCredentialUrl && extractStoragePath('portfolio', finalCredentialUrl)) {
+        await deleteStoragePdf(finalCredentialUrl)
+      }
       const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
@@ -207,11 +286,13 @@ export default function Certifications() {
 
   const handleDelete = async (cert: CertificationRow) => {
     try {
-      // Clean up storage PDF if attached
+      // 1) Delete the row first (and confirm a row was deleted)
+      await remove(cert.id)
+
+      // 2) Only then clean up storage PDF if attached
       if (cert.credential_url) {
         await deleteStoragePdf(cert.credential_url)
       }
-      await remove(cert.id)
       toast.success('Certification deleted.')
     } catch (err) {
       const msg = friendlyErrorMessage(err)

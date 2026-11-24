@@ -246,7 +246,18 @@ export default function Sections() {
   // ---- Delete custom section (also removes storage files) ----
   const handleDelete = async (section: SectionRow) => {
     try {
-      // Delete gallery images from storage
+      // 1) Delete database row first (and confirm row was returned)
+      const { data, error: err } = await supabase
+        .from('sections')
+        .delete()
+        .eq('id', section.id)
+        .select()
+      if (err) throw err
+      if (!data || data.length === 0) {
+        throw new Error('No row was deleted.')
+      }
+
+      // 2) Only delete storage files AFTER database row deletion is confirmed
       if (section.type === 'gallery') {
         const content = section.content as { images?: GalleryImage[] }
         if (content?.images) {
@@ -257,8 +268,7 @@ export default function Sections() {
           }
         }
       }
-      const { error: err } = await supabase.from('sections').delete().eq('id', section.id)
-      if (err) throw err
+
       toast.success('Section deleted.')
       await reload()
     } catch (err) {
@@ -379,13 +389,61 @@ export default function Sections() {
     const file = e.target.files?.[0]
     if (!file) return
     setGalleryUploading(true)
+    let uploadedPath: string | null = null
+
     try {
       const safeSlug = editingContent.slug.replace(/[^a-z0-9_-]+/g, '-')
       const path = `sections/${safeSlug}/${safeName(file.name)}`
-      const { url } = await uploadFile('portfolio', path, file)
-      setGalleryImages((prev) => [...prev, { url, path, caption: '' }])
-      toast.success('Image uploaded.')
+
+      // 1) upload the new file
+      const uploadResult = await uploadFile('portfolio', path, file)
+      uploadedPath = uploadResult.path
+
+      const nextImages = [...galleryImages, { url: uploadResult.url, path: uploadResult.path, caption: '' }]
+      const existing = (editingContent.content as Record<string, unknown>) || {}
+      const newContent = {
+        ...existing,
+        images: nextImages.map((im) => ({
+          url: im.url,
+          path: im.path,
+          caption: emptyToNull(im.caption),
+        })),
+      }
+
+      // 2) save the row with the new URL (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('sections')
+        .update({ content: newContent })
+        .eq('id', editingContent.id)
+
+      if (editingContent.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', editingContent.updated_at)
+      }
+
+      const { data, error: err } = await updateQuery.select()
+      if (err) throw err
+      if (!data || data.length === 0) {
+        throw new Error(
+          editingContent.updated_at
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row updated.'
+        )
+      }
+
+      const updatedRow = data[0] as SectionRow
+      setEditingContent(updatedRow)
+      setGalleryImages(nextImages)
+      toast.success('Image uploaded and saved.')
+      await reload()
     } catch (err) {
+      // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+      if (uploadedPath) {
+        try {
+          await removeFile('portfolio', uploadedPath)
+        } catch (cleanupErr) {
+          console.warn('Could not clean up uploaded gallery image:', cleanupErr)
+        }
+      }
       toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setGalleryUploading(false)
@@ -394,11 +452,58 @@ export default function Sections() {
   }
 
   const handleRemoveGalleryImage = async (index: number) => {
-    const img = galleryImages[index]
-    if (img.path) {
-      try { await removeFile('portfolio', img.path) } catch { /* ignore */ }
+    if (!editingContent) return
+    const imgToRemove = galleryImages[index]
+    const nextImages = galleryImages.filter((_, i) => i !== index)
+    const existing = (editingContent.content as Record<string, unknown>) || {}
+    const newContent = {
+      ...existing,
+      images: nextImages.map((im) => ({
+        url: im.url,
+        path: im.path,
+        caption: emptyToNull(im.caption),
+      })),
     }
-    setGalleryImages((prev) => prev.filter((_, i) => i !== index))
+
+    try {
+      // 1) save the row with the URL cleared (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('sections')
+        .update({ content: newContent })
+        .eq('id', editingContent.id)
+
+      if (editingContent.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', editingContent.updated_at)
+      }
+
+      const { data, error: err } = await updateQuery.select()
+      if (err) throw err
+      if (!data || data.length === 0) {
+        throw new Error(
+          editingContent.updated_at
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row updated.'
+        )
+      }
+
+      const updatedRow = data[0] as SectionRow
+      setEditingContent(updatedRow)
+      setGalleryImages(nextImages)
+
+      // 2) Deleting a file via a Remove button must also happen only after the row is saved with the URL cleared
+      if (imgToRemove.path) {
+        try {
+          await removeFile('portfolio', imgToRemove.path)
+        } catch (storageErr) {
+          console.warn('Could not remove gallery image from storage:', storageErr)
+        }
+      }
+      toast.success('Image removed.')
+      await reload()
+    } catch (err) {
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to remove image: ${msg}`)
+    }
   }
 
 

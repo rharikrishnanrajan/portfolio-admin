@@ -28,7 +28,7 @@ import {
   useToast,
 } from '../components/ui'
 import { SocialIcon, SOCIAL_ICON_OPTIONS, type SocialIconType } from '../components/SocialIcon'
-import type { ProfileRow, SocialLinkRow } from '../types/rows'
+import type { ProfileRow, SocialLinkRow, ProjectFile } from '../types/rows'
 
 export default function Profile() {
   const { toast } = useToast()
@@ -167,6 +167,168 @@ export default function Profile() {
       setTimeout(() => profileErrorRef.current?.scrollIntoView({ block: 'center' }), 0)
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  // Avatar upload/replace/remove handler
+  const handleAvatarChange = async (newUrl: string | null) => {
+    const oldUrl = profile.avatar_url
+    try {
+      // 2) save the row with the new URL (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('profile')
+        .update({ avatar_url: newUrl })
+        .eq('id', 1)
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          loadedUpdatedAt
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check your permissions and try again.'
+        )
+      }
+
+      setLoadedUpdatedAt(data[0].updated_at)
+      setProfile((prev) => ({ ...prev, avatar_url: newUrl }))
+
+      // 3) only then delete the old file
+      if (oldUrl && oldUrl !== newUrl) {
+        const oldPath = extractStoragePath('portfolio', oldUrl)
+        if (oldPath) {
+          try {
+            await removeFile('portfolio', oldPath)
+          } catch (err) {
+            console.warn('Could not remove previous avatar from storage:', err)
+          }
+        }
+      }
+
+      if (!newUrl) {
+        toast.info('Avatar removed.')
+      } else {
+        toast.success('Avatar updated.')
+      }
+    } catch (err) {
+      // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+      if (newUrl) {
+        const newPath = extractStoragePath('portfolio', newUrl)
+        if (newPath) {
+          try {
+            await removeFile('portfolio', newPath)
+          } catch (cleanupErr) {
+            console.warn('Could not clean up new avatar file:', cleanupErr)
+          }
+        }
+      }
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to update avatar: ${msg}`)
+      throw err
+    }
+  }
+
+  // Resume upload handler
+  const handleResumeUploaded = async (file: ProjectFile) => {
+    const oldUrl = profile.resume_url
+    try {
+      // 2) save the row with the new URL (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('profile')
+        .update({ resume_url: file.url })
+        .eq('id', 1)
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          loadedUpdatedAt
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check your permissions and try again.'
+        )
+      }
+
+      setLoadedUpdatedAt(data[0].updated_at)
+      setProfile((prev) => ({ ...prev, resume_url: file.url }))
+
+      // 3) only then delete the old file
+      if (oldUrl && oldUrl !== file.url) {
+        const oldPath = extractStoragePath('portfolio', oldUrl)
+        if (oldPath) {
+          try {
+            await removeFile('portfolio', oldPath)
+          } catch (err) {
+            console.warn('Could not remove previous resume from storage:', err)
+          }
+        }
+      }
+      toast.success('Resume updated.')
+    } catch (err) {
+      // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+      const newPath = file.path || extractStoragePath('portfolio', file.url)
+      if (newPath) {
+        try {
+          await removeFile('portfolio', newPath)
+        } catch (cleanupErr) {
+          console.warn('Could not clean up new resume file:', cleanupErr)
+        }
+      }
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to update resume: ${msg}`)
+      throw err
+    }
+  }
+
+  // Resume remove handler (deleting only after row saved with URL cleared)
+  const handleRemoveResume = async () => {
+    const oldUrl = profile.resume_url
+    if (!oldUrl) return
+
+    try {
+      // 1) save the row with the URL cleared (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('profile')
+        .update({ resume_url: null })
+        .eq('id', 1)
+
+      if (loadedUpdatedAt) {
+        updateQuery = updateQuery.eq('updated_at', loadedUpdatedAt)
+      }
+
+      const { data, error } = await updateQuery.select()
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          loadedUpdatedAt
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check your permissions and try again.'
+        )
+      }
+
+      setLoadedUpdatedAt(data[0].updated_at)
+      setProfile((prev) => ({ ...prev, resume_url: null }))
+
+      // 2) Deleting a file via a Remove button must also happen only after the row is saved with the URL cleared
+      const oldPath = extractStoragePath('portfolio', oldUrl)
+      if (oldPath) {
+        try {
+          await removeFile('portfolio', oldPath)
+        } catch (err) {
+          console.warn('Could not remove resume from storage:', err)
+        }
+      }
+      toast.info('Resume removed.')
+    } catch (err) {
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to remove resume: ${msg}`)
     }
   }
 
@@ -342,7 +504,7 @@ export default function Profile() {
                 bucket="portfolio"
                 folder="profile"
                 value={profile.avatar_url}
-                onChange={(url) => setProfile({ ...profile, avatar_url: url })}
+                onChange={handleAvatarChange}
                 label="Avatar Photo"
                 hint="PNG, JPG, WEBP, AVIF up to 10 MB"
               />
@@ -378,19 +540,7 @@ export default function Profile() {
                       ) : null}
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (profile.resume_url) {
-                            const oldPath = extractStoragePath('portfolio', profile.resume_url)
-                            if (oldPath) {
-                              try {
-                                await removeFile('portfolio', oldPath)
-                              } catch (err) {
-                                console.warn('Could not remove resume from storage:', err)
-                              }
-                            }
-                          }
-                          setProfile({ ...profile, resume_url: null })
-                        }}
+                        onClick={handleRemoveResume}
                         className="p-1.5 border border-line bg-bg text-muted hover:text-rose-400 transition-colors"
                         title="Remove resume"
                       >
@@ -404,19 +554,7 @@ export default function Profile() {
                   bucket="portfolio"
                   folder="resume"
                   accept=".pdf,application/pdf"
-                  onUploaded={async (file) => {
-                    if (profile.resume_url && profile.resume_url !== file.url) {
-                      const oldPath = extractStoragePath('portfolio', profile.resume_url)
-                      if (oldPath) {
-                        try {
-                          await removeFile('portfolio', oldPath)
-                        } catch (err) {
-                          console.warn('Could not remove previous resume from storage:', err)
-                        }
-                      }
-                    }
-                    setProfile({ ...profile, resume_url: file.url })
-                  }}
+                  onUploaded={handleResumeUploaded}
                   hint="Upload your official resume in PDF format (up to 10 MB)"
                 />
               )}

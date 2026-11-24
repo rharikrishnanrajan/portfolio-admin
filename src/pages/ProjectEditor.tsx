@@ -258,19 +258,11 @@ export default function ProjectEditor() {
 
   // Cover image change (upload, replace, or remove)
   const handleCoverChange = async (newUrl: string | null) => {
-    // When removing or replacing, delete old cover from storage
-    if (project.cover_url && project.cover_url !== newUrl && project.id) {
-      try {
-        await deleteProjectCover(project.id, project.cover_url)
-      } catch (err) {
-        console.warn('Could not remove previous cover image from storage:', err)
-      }
-    }
+    if (!project.id) return
+    const oldCoverUrl = project.cover_url
 
-    setProject((prev) => ({ ...prev, cover_url: newUrl }))
-
-    // If persisted row exists, update row in database immediately
-    if (project.id) {
+    try {
+      // 2) save the row with the new URL (and confirm a row was returned)
       let updateQuery = supabase
         .from('projects')
         .update({ cover_url: newUrl })
@@ -282,28 +274,54 @@ export default function ProjectEditor() {
 
       const { data, error } = await updateQuery.select()
 
-      if (error) {
-        toast.error(`Failed to update cover URL: ${friendlyErrorMessage(error)}`)
-      } else if (!data || data.length === 0) {
-        toast.error('Failed to update cover URL: This item was changed elsewhere.')
-      } else {
-        const updatedRow = data[0] as ProjectRow
-        setProject((prev) => ({ ...prev, ...updatedRow }))
-        if (!newUrl) {
-          toast.info('Cover image removed from storage.')
-        } else {
-          toast.success('Cover image updated.')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          project.updated_at
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check the id and your login.'
+        )
+      }
+
+      const updatedRow = data[0] as ProjectRow
+      setProject((prev) => ({ ...prev, ...updatedRow }))
+
+      // 3) only then delete the old file
+      if (oldCoverUrl && oldCoverUrl !== newUrl) {
+        try {
+          await deleteProjectCover(project.id, oldCoverUrl)
+        } catch (err) {
+          console.warn('Could not remove previous cover image from storage:', err)
         }
       }
+
+      if (!newUrl) {
+        toast.info('Cover image removed.')
+      } else {
+        toast.success('Cover image updated.')
+      }
+    } catch (err) {
+      // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+      if (newUrl) {
+        try {
+          await deleteProjectCover(project.id, newUrl)
+        } catch (cleanupErr) {
+          console.warn('Could not clean up new cover image:', cleanupErr)
+        }
+      }
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to update cover URL: ${msg}`)
+      throw err
     }
   }
 
   // Document uploaded handler
   const handleDocumentUploaded = async (newFile: ProjectFile) => {
+    if (!project.id) return
     const nextFiles = [...(project.files || []), newFile]
-    setProject((prev) => ({ ...prev, files: nextFiles }))
 
-    if (project.id) {
+    try {
+      // 2) save the row with the new file (and confirm a row was returned)
       let updateQuery = supabase
         .from('projects')
         .update({ files: nextFiles })
@@ -315,44 +333,63 @@ export default function ProjectEditor() {
 
       const { data, error } = await updateQuery.select()
 
-      if (error) {
-        toast.error(`Failed to update files in database: ${friendlyErrorMessage(error)}`)
-      } else if (!data || data.length === 0) {
-        toast.error('Failed to update files in database: This item was changed elsewhere.')
-      } else {
-        const updatedRow = data[0] as ProjectRow
-        setProject((prev) => ({ ...prev, ...updatedRow }))
-        toast.success(`Attached "${newFile.name}".`)
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          project.updated_at
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check the id and your login.'
+        )
       }
+
+      const updatedRow = data[0] as ProjectRow
+      setProject((prev) => ({ ...prev, ...updatedRow }))
+      toast.success(`Attached "${newFile.name}".`)
+    } catch (err) {
+      // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+      try {
+        await deleteProjectDocument(newFile)
+      } catch (cleanupErr) {
+        console.warn('Could not clean up new document file:', cleanupErr)
+      }
+      const msg = friendlyErrorMessage(err)
+      toast.error(`Failed to update files in database: ${msg}`)
+      throw err
     }
   }
 
-  // Document remove handler (deletes from storage and updates files column)
+  // Document remove handler (deletes from storage ONLY after row is saved with file cleared)
   const handleRemoveDocument = async (fileToRemove: ProjectFile) => {
+    if (!project.id) return
+    const nextFiles = (project.files || []).filter((f) => f.path !== fileToRemove.path)
+
     try {
-      await deleteProjectDocument(fileToRemove)
-      const nextFiles = (project.files || []).filter((f) => f.path !== fileToRemove.path)
-      setProject((prev) => ({ ...prev, files: nextFiles }))
+      // 1) save the row with the URL/file cleared (and confirm a row was returned)
+      let updateQuery = supabase
+        .from('projects')
+        .update({ files: nextFiles })
+        .eq('id', project.id)
 
-      if (project.id) {
-        let updateQuery = supabase
-          .from('projects')
-          .update({ files: nextFiles })
-          .eq('id', project.id)
-
-        if (project.updated_at) {
-          updateQuery = updateQuery.eq('updated_at', project.updated_at)
-        }
-
-        const { data, error } = await updateQuery.select()
-
-        if (error) throw error
-        if (!data || data.length === 0) {
-          throw new Error('This item was changed elsewhere. Reload and try again.')
-        }
-        const updatedRow = data[0] as ProjectRow
-        setProject((prev) => ({ ...prev, ...updatedRow }))
+      if (project.updated_at) {
+        updateQuery = updateQuery.eq('updated_at', project.updated_at)
       }
+
+      const { data, error } = await updateQuery.select()
+
+      if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error(
+          project.updated_at
+            ? 'This item was changed elsewhere. Reload and try again.'
+            : 'No row was updated. Check the id and your login.'
+        )
+      }
+
+      const updatedRow = data[0] as ProjectRow
+      setProject((prev) => ({ ...prev, ...updatedRow }))
+
+      // 2) Deleting a file via a Remove button must also happen only after the row is saved with the URL cleared
+      await deleteProjectDocument(fileToRemove)
       toast.success(`Removed "${fileToRemove.name}" from storage.`)
     } catch (err) {
       const msg = friendlyErrorMessage(err)
@@ -364,7 +401,7 @@ export default function ProjectEditor() {
   const handleDeleteProject = async () => {
     if (!project.id) return
     try {
-      await deleteProjectStorage(project.id, project.files, project.cover_url)
+      // 1) Delete the database row first (and confirm a row was deleted)
       const { data, error } = await supabase
         .from('projects')
         .delete()
@@ -375,6 +412,9 @@ export default function ProjectEditor() {
       if (!data || data.length === 0) {
         throw new Error('No row was deleted. Check your permissions and try again.')
       }
+
+      // 2) Only then delete storage files
+      await deleteProjectStorage(project.id, project.files, project.cover_url)
 
       toast.success('Project deleted.')
       navigate('/projects')

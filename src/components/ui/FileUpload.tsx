@@ -1,13 +1,13 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { AlertCircle, ExternalLink, FileText, Loader2, Upload, X } from 'lucide-react'
-import { safeName, uploadFile, sanitizeStoragePath } from '../../lib/storage'
+import { safeName, uploadFile, removeFile, sanitizeStoragePath } from '../../lib/storage'
 import { safeUrl } from '../../lib/safeUrl'
 import type { ProjectFile } from '../../types/rows'
 
 export interface FileUploadProps {
   bucket?: string
   folder?: string
-  onUploaded: (file: ProjectFile) => void
+  onUploaded: (file: ProjectFile) => Promise<void> | void
   label?: string
   disabled?: boolean
   hint?: string
@@ -33,20 +33,36 @@ export function FileUpload({
 
     setError(null)
     setUploading(true)
+    let uploadedPath: string | null = null
 
     try {
       const cleanFolder = sanitizeStoragePath(folder)
       const fileName = safeName(file.name)
       const path = cleanFolder ? `${cleanFolder}/${fileName}` : fileName
 
-      const { url, path: uploadedPath } = await uploadFile(bucket, path, file)
+      // 1) Upload the new file
+      const { url, path: returnedPath } = await uploadFile(bucket, path, file)
+      uploadedPath = returnedPath
 
-      onUploaded({
-        name: file.name,
-        url,
-        path: uploadedPath,
-        type: file.type || file.name.slice(file.name.lastIndexOf('.')),
-      })
+      // 2) Save the row via onUploaded (and confirm a row was returned)
+      try {
+        await onUploaded({
+          name: file.name,
+          url,
+          path: returnedPath,
+          type: file.type || file.name.slice(file.name.lastIndexOf('.')),
+        })
+      } catch (err) {
+        // If step 2 fails, delete the NEW file instead so it is not orphaned, and keep the old one.
+        if (uploadedPath) {
+          try {
+            await removeFile(bucket, uploadedPath)
+          } catch (cleanupErr) {
+            console.warn('Could not clean up newly uploaded file after save failure:', cleanupErr)
+          }
+        }
+        throw err
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
