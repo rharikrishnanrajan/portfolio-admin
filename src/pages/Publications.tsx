@@ -229,7 +229,7 @@ export default function Publications() {
               label="Publication Date"
               value={editingItem.published_on || ''}
               onChange={(e) => setEditingItem({ ...editingItem, published_on: e.target.value })}
-              className="[color-scheme:dark]"
+              className="scheme-dark"
             />
           </div>
 

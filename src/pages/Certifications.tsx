@@ -335,7 +335,7 @@ export default function Certifications() {
               value={startMonth}
               onChange={(e) => setStartMonth(e.target.value)}
               hint="Month and year certification was awarded"
-              className="[color-scheme:dark]"
+              className="scheme-dark"
             />
             <Field
               type="month"
@@ -343,7 +343,7 @@ export default function Certifications() {
               value={endMonth}
               onChange={(e) => setEndMonth(e.target.value)}
               hint="Leave empty if no expiration / lifetime validity"
-              className="[color-scheme:dark]"
+              className="scheme-dark"
             />
           </div>
 

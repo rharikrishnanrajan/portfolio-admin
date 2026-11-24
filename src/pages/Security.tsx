@@ -266,7 +266,7 @@ export default function Security() {
               Open your authenticator app (Google Authenticator, 1Password, Authy, Microsoft Authenticator) and scan the code below.
             </p>
 
-            <div className="p-4 bg-white rounded-sm flex items-center justify-center max-w-[220px] mx-auto border border-line">
+            <div className="p-4 bg-white rounded-sm flex items-center justify-center max-w-55 mx-auto border border-line">
               <img
                 src={enrollData.totp.qr_code}
                 alt="TOTP QR Code"
