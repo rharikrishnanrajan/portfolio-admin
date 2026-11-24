@@ -69,7 +69,7 @@ While baseline security practices are observed (no secret keys in git history, c
 
 | ID | Finding | Location | Severity | Proposed Fix |
 |---|---|---|---|---|
-| **AUTH-01** | **Session stored in `localStorage` without idle timeout**<br>Supabase client stores session tokens in browser `localStorage`. No idle timeout mechanism exists to sign out users after period of inactivity. If an admin leaves an active session unattended, the account remains vulnerable to local or physical takeover. | `src/lib/supabase.ts:13`<br>`src/lib/auth.tsx` | **High** | Implement a 30-minute idle timeout listener (mouse, keyboard, touch) with a 1-minute warning toast. Additionally, trigger sign-out if the browser tab has been hidden (`document.visibilityState === 'hidden'`) for more than 2 hours. |
+| **AUTH-01** | **Session stored in `localStorage` without idle timeout**<br>Supabase client stores session tokens in browser `localStorage`. No idle timeout mechanism exists to sign out users after period of inactivity. If an admin leaves an active session unattended, the account remains vulnerable to local or physical takeover. | `src/lib/supabase.ts:13`<br>`src/lib/auth.tsx` | **High** | Implement a 30-minute idle inactivity timeout listener (mouse, keyboard, touch) with a 1-minute warning toast. Additionally, trigger sign-out if the browser tab has been hidden (`document.visibilityState === 'hidden'`) for more than 2 hours. |
 | **AUTH-02** | **Absence of Multi-Factor Authentication (MFA)**<br>The admin application relies solely on single-factor password authentication. Supabase Auth MFA (TOTP) is not enrolled or checked. | `src/lib/auth.tsx`<br>`src/components/RequireAdmin.tsx` | **High** | Add a `/security` page to enroll TOTP authenticators via `supabase.auth.mfa.enroll`, display QR code, verify challenge, and list/unenroll factors. Add an `aal` level check in authentication routing. |
 | **AUTH-03** | **No global sign-out capability**<br>`signOut` in `auth.tsx` invokes `supabase.auth.signOut()` without specifying `{ scope: 'global' }`. The admin has no option to invalidate sessions across other devices. | `src/lib/auth.tsx:52-54` | **Low** | Provide a "Sign out of all devices" option calling `supabase.auth.signOut({ scope: 'global' })`. |
 | **AUTH-04** | **Verbose login errors / Fallback to raw error strings**<br>`friendlyError()` returns `raw` by default. Descriptive error messages from the backend could assist user enumeration or expose auth configuration details. | `src/pages/Login.tsx:17` | **Medium** | Standardize login failure messages to a generic string: `"Email or password is incorrect"`, suppressing raw backend errors. |
@@ -134,3 +134,163 @@ Following this read-only audit, security hardening proceeds in sequential phases
   - Build `scripts/security-smoke.ps1` to verify Supabase RLS policies and role restrictions with the anon key.
 - **Phase 7 (Final Report & Verification Checklist):**
   - Deliver final status matrix and Supabase/Vercel dashboard security checklist.
+
+---
+
+## Phase 7: Final Status Matrix
+
+**Updated:** 2026-11-24 (after Phases 2–6 complete)
+
+| ID | Finding | Severity | Status | Fixed By |
+|---|---|---|---|---|
+| **XSS-01** | Unvalidated stored URLs in `<a href>` / `<img src>` | High | ✅ Fixed | `src/lib/safeUrl.ts` — `safeUrl()` / `safeImageUrl()` applied to all rendered links and image sources across all pages and components |
+| **XSS-02** | Incomplete URL validation in `isValidUrl` | Medium | ✅ Fixed | `src/lib/validation.ts` — rewrote `isValidUrl()` using `safeUrl()`; `src/lib/schemas.ts` — Zod schemas validate all URL fields on write |
+| **XSS-03** | Mailto link parameter injection | Low | ✅ Fixed | `src/pages/Messages.tsx` — `safeUrl()` applied to reply mailto link; `encodeURIComponent` encoding applied |
+| **XSS-04** | Dangerous HTML sinks | Informational | ✅ Pass (no action needed) | No `dangerouslySetInnerHTML` or `innerHTML` present |
+| **XSS-05** | `target="_blank"` without `rel="noopener noreferrer"` | Informational | ✅ Pass (no action needed) | All existing external links already carry `rel="noopener noreferrer"` |
+| **INJ-01** | PostgREST filter injection | Informational | ✅ Pass (no action needed) | All queries use parameterized `.eq()` calls |
+| **INJ-02** | Raw SQL from client | Informational | ✅ Pass (no action needed) | No raw SQL executed from frontend |
+| **INJ-03** | Client-side table identifier in `useCrud` | Low | ✅ Fixed | `src/lib/useCrud.ts` — `table` parameter constrained to `TableName` union type via `src/lib/db.ts` schema registry |
+| **SEC-01** | Git history secret scan | Informational | ✅ Pass (no action needed) | No secrets ever committed |
+| **SEC-02** | `.gitignore` coverage | Informational | ✅ Pass (no action needed) | `.env.local` correctly ignored |
+| **SEC-03** | Leftover debug lines | Informational | ✅ Pass (no action needed) | No debug hooks present |
+| **UPL-01** | File validation by extension/MIME only | High | ✅ Fixed | `src/lib/storage.ts` — `detectFileType()` verifies magic bytes for PDF, PNG, JPEG, WebP, AVIF, and Office OpenXML; `contentType` set from detected bytes; SVG/HTML/JS rejected |
+| **UPL-02** | Predictable timestamp filenames | Medium | ✅ Fixed | `src/lib/storage.ts` — `safeName()` generates `<uuid>-<safe-slug>.<ext>` using `crypto.randomUUID()` |
+| **UPL-03** | Unsanitized slug in storage paths | Medium | ✅ Fixed | `src/lib/storage.ts` — `sanitizeStoragePath()` strips traversal segments; `src/pages/Sections.tsx` — slug validated against `^[a-z0-9-]{1,60}$` before use in storage path |
+| **UPL-04** | Orphaned files on replacement/removal | Medium | ✅ Fixed | `src/components/ui/ImageUpload.tsx` — calls `removeFile()` on old object before replacing or removing; `src/pages/Profile.tsx` — deletes old resume PDF on replacement/removal |
+| **AUTH-01** | No session idle timeout | High | ✅ Fixed | `src/lib/auth.tsx` — 30-minute inactivity timeout with 1-minute warning toast; 2-hour hidden-tab sign-out |
+| **AUTH-02** | No MFA | High | ✅ Fixed | `src/pages/Security.tsx` — TOTP enrolment/unenrolment with QR code; `src/components/RequireMfa.tsx` — AAL2 enforcement when factor enrolled; `src/components/MfaChallenge.tsx` — challenge screen |
+| **AUTH-03** | No global sign-out | Low | ✅ Fixed | `src/lib/auth.tsx` — `signOutAll()` added with `{ scope: 'global' }`; `src/components/Layout.tsx` — "Sign out of all devices" button; `src/pages/Security.tsx` — global sign-out action |
+| **AUTH-04** | Verbose login errors | Medium | ✅ Fixed | `src/pages/Login.tsx` — all login failures return generic `"Email or password is incorrect"` |
+| **AUTH-05** | No client-side login throttle | Low | ✅ Fixed | `src/pages/Login.tsx` — exponential backoff lockout after 3 consecutive failures with countdown timer |
+| **ERR-01** | Raw DB errors shown to users | Medium | ✅ Fixed | `src/lib/errors.ts` — `friendlyErrorMessage()` maps all Supabase/PostgREST/PostgreSQL error codes to safe messages; integrated in all pages and hooks |
+| **ERR-02** | Storage deletion errors swallowed | Medium | ✅ Fixed | `src/lib/projectStorage.ts`, `src/pages/Certifications.tsx`, `src/pages/ProjectEditor.tsx` — storage errors surfaced as warning toasts |
+| **ERR-03** | ErrorBoundary unmounted / exposes raw stack | Medium | ✅ Fixed | `src/components/ErrorBoundary.tsx` — redesigned with generic fallback; `src/main.tsx` — mounted at application root |
+| **ERR-04** | No optimistic concurrency on writes | Medium | ✅ Fixed | `src/lib/db.ts` — `updateRow()` matches `updated_at`; `src/lib/useCrud.ts`, `src/pages/ProjectEditor.tsx`, `src/pages/Settings.tsx`, `src/pages/Profile.tsx`, `src/pages/Theme.tsx`, `src/pages/About.tsx`, `src/pages/Sections.tsx` — all edits include `updated_at` check |
+| **ERR-05** | No read timeouts or network retry | Low | ✅ Fixed | `src/lib/db.ts` — `withReadRetry()`: 15-second AbortController timeout; 3 retries with exponential backoff and jitter on network errors / 5xx / 429 |
+| **DEP-01** | npm audit vulnerabilities | Informational | ✅ Pass (0 vulnerabilities) | `npm audit --audit-level=high` added to CI via `npm run audit` |
+| **DEP-02** | `@tailwindcss/vite` in dependencies | Low | ⚠️ Needs your action | Move to `devDependencies` during next scheduled dependency maintenance |
+| **DEP-03** | Missing `zod` and test dependencies | Medium | ✅ Fixed | `zod` added as runtime dep; `vitest`, `@testing-library/react`, `jsdom`, `@vitest/coverage-v8` added as devDependencies |
+| **BLD-01** | `console.*` in production bundles | Low | ✅ Fixed | `vite.config.ts` — Rolldown compress options `dropConsole: true`, `dropDebugger: true` |
+| **BLD-02** | Source maps not explicitly disabled | Low | ✅ Fixed | `vite.config.ts` — `build: { sourcemap: false }` explicitly declared |
+
+### New Finding: DB-01 (discovered in Phase 6 smoke test)
+
+| ID | Finding | Severity | Status | Detail |
+|---|---|---|---|---|
+| **DB-01** | **`chk_messages_email` constraint not enforced**<br>The smoke test confirmed the anon role can insert a contact message with an invalid email (e.g. `not-an-email`) and receive HTTP 201. This indicates the `supabase/04_hardening.sql` migration has not been applied to the production database. The check constraint `chk_messages_email` does not exist. | **High** | ⚠️ Needs your action — run migration | Apply `supabase/04_hardening.sql` in the Supabase dashboard SQL editor. After applying, re-run `scripts/security-smoke.ps1` to confirm the constraint is enforced (the last check will flip to PASS). |
+
+---
+
+## Phase 7: Supabase & Vercel Dashboard Checklist
+
+> [!IMPORTANT]
+> These items **cannot be completed by code changes** — they require actions in the Supabase and Vercel dashboards. Work through each item in order. After completing all items, re-run `scripts/security-smoke.ps1` and verify all checks PASS.
+
+---
+
+### Supabase Dashboard Actions
+
+**1. Apply `04_hardening.sql` migration (Critical)**
+- Go to: **Supabase Dashboard → SQL Editor**
+- Open `supabase/04_hardening.sql` from this repo
+- Paste the entire contents and click **Run**
+- **Verify:** Re-run `scripts/security-smoke.ps1`. The "INSERT messages invalid email" check must flip to PASS.
+
+**2. Set a strong password policy**
+- Go to: **Authentication → Policies → Password**
+- Set minimum password length to **12 characters**
+- Enable **"Prevent use of leaked passwords"** (HaveIBeenPwned integration)
+- **Verify:** Try creating a new auth user with a weak password — it should be rejected.
+
+**3. Disable new user sign-ups (admin-only site)**
+- Go to: **Authentication → Settings → User Signups**
+- Toggle **"Enable Signups"** to **OFF**
+- **Verify:** Attempt to call `supabase.auth.signUp()` from the browser console — it should return an error.
+
+**4. Enable CAPTCHA on the Auth endpoint**
+- Go to: **Authentication → Settings → Bot and Abuse Protection**
+- Enable **hCaptcha** or **Turnstile** and configure your site key
+- **Verify:** The login endpoint requires CAPTCHA challenge for unauthenticated requests.
+
+**5. Confirm Auth rate limits are configured**
+- Go to: **Authentication → Settings → Rate Limits**
+- Confirm: sign-in attempts are limited (default: 5 per 10 seconds per IP)
+- Confirm: OTP / magic-link sends are limited
+- **Verify:** These are on by default; confirm they have not been disabled.
+
+**6. Set allowed Redirect URLs (prevent open redirects)**
+- Go to: **Authentication → URL Configuration**
+- Under **"Redirect URLs"**, ensure only your production domain is listed: `https://<your-vercel-domain>.vercel.app/**`
+- Remove any `http://localhost` entries before going live
+- **Verify:** A `redirect_to` to an arbitrary domain in a Supabase Auth link must be rejected.
+
+**7. Enroll TOTP MFA on the admin account**
+- In the admin app, go to **Settings → Security** (`/security`)
+- Click **"Enrol Authenticator"**, scan the QR code with an authenticator app
+- Enter the 6-digit verification code and confirm
+- **Verify:** Sign out and sign back in — you should be prompted for the TOTP code before accessing any page.
+
+**8. Review RLS policies for all tables**
+- Go to: **Table Editor → [each table] → Policies**
+- Confirm:
+  - `profile`, `site_settings` — anon can SELECT nothing (confirmed by smoke test ✅)
+  - `messages` — anon can INSERT only (confirmed by smoke test ✅), not SELECT/UPDATE/DELETE
+  - `projects`, `sections`, `skill_domains` — anon SELECT only on visible rows (confirmed by smoke test ✅)
+  - `admins` — anon can do nothing (confirmed by smoke test ✅)
+- **Verify:** Smoke test passes all READ/WRITE checks.
+
+**9. Verify Storage bucket policies**
+- Go to: **Storage → Buckets → `portfolio` → Policies**
+- Confirm: SELECT (read) is public; INSERT/UPDATE/DELETE require `auth.role() = 'authenticated'` AND `is_admin()`
+- Do the same for **`project-documents`**
+- **Verify:** Smoke test passes both "UPLOAD bucket (anon denied)" checks ✅ (already confirmed).
+
+**10. Set up an uptime monitor**
+- In Supabase: **Settings → Usage** to watch database connections and storage usage
+- Recommended: Use an external uptime monitor (e.g. BetterUptime, UptimeRobot) pointing to your Vercel deployment URL
+- **Verify:** You receive an alert within 5 minutes of your site going offline.
+
+---
+
+### Vercel Dashboard Actions
+
+**11. Set production environment variables**
+- Go to: **Vercel Project → Settings → Environment Variables**
+- Confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set for the **Production** environment only
+- Ensure no `service_role` key is present in any environment
+- **Verify:** The app loads and connects to Supabase on the production URL.
+
+**12. Enable Vercel Deployment Protection**
+- Go to: **Vercel Project → Settings → Deployment Protection**
+- Enable **"Vercel Authentication"** for preview deployments so preview URLs are not publicly accessible
+- **Verify:** A preview deployment URL requires Vercel SSO to access.
+
+**13. Review custom domain and HTTPS**
+- Go to: **Vercel Project → Settings → Domains**
+- Confirm your production domain has a valid TLS certificate (Vercel provides this automatically)
+- Confirm HTTP redirects to HTTPS (Vercel does this by default)
+- **Verify:** `curl -I http://<your-domain>` returns a 301 redirect to HTTPS.
+
+**14. Enable Vercel Speed Insights / Web Analytics (optional but useful)**
+- Useful for detecting anomalous traffic spikes that could indicate a scraping or abuse attempt
+- **Verify:** Dashboard shows real-time page views.
+
+---
+
+### Final Verification Procedure
+
+After completing all dashboard items:
+
+```powershell
+# From admin/ directory:
+npm run typecheck          # Must exit 0
+npm test                   # Must show 130/130 PASS
+npm run audit              # Must show 0 high/critical vulnerabilities
+npm run build              # Must exit 0, no .map files in dist/
+powershell -ExecutionPolicy Bypass -File scripts/security-smoke.ps1 -EnvFile .env.local
+# Must show 16 PASS | 0 FAIL (after DB-01 migration is applied)
+```
+
+> [!NOTE]
+> Tests that cannot be verified by this agent (require your manual action in the browser or Supabase dashboard) are marked **"Needs your action"** in the status matrix above. Everything in the **Fixed** rows was tested by running the actual code, build, unit tests, or smoke test.

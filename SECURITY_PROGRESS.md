@@ -111,3 +111,71 @@
 
 ### Open Issues
 - None from Phase 5.
+
+---
+
+## Phase 6: Tests and security smoke test
+
+### Files Created / Modified
+- `vitest.config.ts` - created - Vitest configuration with jsdom environment, targeting `src/**/*.test.ts` and `src/**/*.test.tsx`.
+- `tsconfig.test.json` - created - Separate TypeScript config for test files (bundler moduleResolution, vitest/globals types) so test files type-check independently of the app tsconfig.
+- `src/lib/safeUrl.test.ts` - created - 35 unit tests covering: https/http/mailto/tel acceptance; `javascript:`, `data:`, `vbscript:` rejection including mixed-case and whitespace tricks; control character injection (null byte, tab, newline, CR); `safeImageUrl()` helper; allowMailtoTel option; edge cases (null, undefined, empty, whitespace-only, relative URLs).
+- `src/lib/schemas.test.ts` - created - 42 unit tests covering all Zod table schemas (socialLink, profile, certification, publication, project, section, skillDomain, education, overviewRow, competency); slug validation (path traversal, uppercase, spaces, length limit); URL rejection for `javascript:` and `data:`; `validateTableData()` partial mode; fieldErrors shape.
+- `src/lib/storage.test.ts` - created - 25 unit tests for `detectFileType()` (PDF, PNG, JPEG/JPEG-ext, WebP, AVIF, DOCX, XLSX, PPTX, generic ZIP rejection, SVG/HTML/JS rejection, too-short buffer, extension mismatch); `sanitizeStoragePath()` (traversal, single-dot, backslashes, double slashes); `safeName()` (format, lowercase ext, slug sanitization, detected ext override, empty-slug fallback, slug length limit, UUID uniqueness). Supabase client mocked via `vi.mock('./supabase')`.
+- `src/lib/errors.test.ts` - created - 28 unit tests for `friendlyErrorMessage()` covering all PostgreSQL codes (23505, 23514 with sub-cases chk_messages_email/chk_social_url/chk_projects_urls); HTTP statuses 401/403/404/409/413/429/500/503; JWT token strings; row-level security strings; network/AbortError; concurrency pass-through; never-leaks assertions for constraint names and PG error codes.
+- `src/lib/errors.ts` - modified - Fixed plain-object message extraction: added branch for `typeof (err as Record<string, unknown>)?.message === 'string'` before the `String(err)` fallback, so plain `{ code, message }` Supabase/PostgREST error objects are correctly unpacked instead of becoming `[object Object]`.
+- `scripts/security-smoke.ps1` - created - PowerShell 5.1 smoke test script. Reads `.env.local` without printing keys. Sends 16 checks via `curl.exe` using temp files (UTF-8 no-BOM) for JSON bodies. Checks: READ public tables (projects, sections, skill_domains, public_profile) ALLOW; READ admin tables (profile, messages, admins) DENY/EMPTY; INSERT/UPDATE/DELETE projects DENY (HTTP 401 RLS); INSERT admins DENY (HTTP 401 RLS); UPLOAD portfolio bucket DENY (HTTP 400); UPLOAD project-documents bucket DENY (HTTP 400); RPC is_admin returns `false` (not privilege escalation); INSERT valid message ALLOW (HTTP 201); INSERT invalid email DENY — this last check FAILS (HTTP 201) because `chk_messages_email` constraint is not yet in the DB (see DB-01 finding). Exits non-zero on any failure.
+- `package.json` - modified - Added `typecheck` (`tsc -b`), `test` (`vitest run`), and `audit` (`npm audit --audit-level=high`) npm scripts.
+- `.github/workflows/ci.yml` - modified - Replaced `npm test --if-present` with explicit `npm run typecheck` then `npm test`; replaced inline `npm audit --audit-level=high` with `npm run audit`.
+- `package-lock.json` - modified - Updated by `npm install --save-dev vitest @testing-library/react jsdom @vitest/coverage-v8`.
+
+### Test Results (run `npm test` to verify)
+- `src/lib/safeUrl.test.ts` — **35/35 PASS**
+- `src/lib/schemas.test.ts` — **42/42 PASS**
+- `src/lib/storage.test.ts` — **25/25 PASS**
+- `src/lib/errors.test.ts` — **28/28 PASS**
+- **Total: 130/130 PASS**
+
+### Smoke Test Results (run `scripts/security-smoke.ps1 -EnvFile .env.local`)
+- **15 PASS | 1 FAIL**
+- 1 FAIL = DB-01: `chk_messages_email` constraint absent → invalid email accepted (HTTP 201). Requires running `supabase/04_hardening.sql`.
+
+### What You Should Test
+1. **Run unit tests:** `npm test` — must show 130/130 PASS.
+2. **Run typecheck:** `npm run typecheck` — must exit 0.
+3. **Run audit:** `npm run audit` — must show 0 high/critical vulnerabilities.
+4. **Run smoke test:** `powershell -ExecutionPolicy Bypass -File scripts/security-smoke.ps1 -EnvFile .env.local` — currently 15 PASS | 1 FAIL (DB-01).
+5. **Apply migration and re-smoke:** Run `supabase/04_hardening.sql` in Supabase SQL Editor, then re-run smoke test — the final check must flip to PASS.
+
+### Open Issues
+- **DB-01 (High):** `chk_messages_email` constraint absent — apply `supabase/04_hardening.sql` in Supabase SQL Editor. After applying, re-run smoke test to confirm all 16 checks PASS.
+
+---
+
+## Phase 7: Final report
+
+### Files Created / Modified
+- `admin/SECURITY_AUDIT.md` - modified - Added Phase 7 Final Status Matrix (all 30 findings + new DB-01; Fixed/Pass/Needs action column); added Supabase & Vercel Dashboard Checklist (14 numbered items with verification steps); added Final Verification Procedure with exact commands to run.
+- `admin/SECURITY_PROGRESS.md` - modified - Appended Phase 6 and Phase 7 entries.
+
+### What You Should Test (Phase 7 — Needs Your Action)
+Complete the numbered checklist in `SECURITY_AUDIT.md` Phase 7 section in order:
+1. Run `supabase/04_hardening.sql` in Supabase SQL Editor → re-run smoke test → 16/16 PASS.
+2. Set password policy (12+ chars, leaked-password check).
+3. Disable new user sign-ups.
+4. Enable CAPTCHA on auth endpoint.
+5. Confirm auth rate limits are active.
+6. Set allowed Redirect URLs to production domain only.
+7. Enrol TOTP MFA on the admin account via `/security` page.
+8. Review all RLS policies in Table Editor.
+9. Verify Storage bucket policies (portfolio, project-documents).
+10. Set up uptime monitor.
+11. Confirm Vercel environment variables (no service_role key).
+12. Enable Vercel Deployment Protection on previews.
+13. Confirm custom domain TLS and HTTP→HTTPS redirect.
+14. (Optional) Enable Vercel Speed Insights.
+
+### Open Issues
+- **DB-01 (High):** Apply `supabase/04_hardening.sql` → `chk_messages_email` constraint will block invalid email inserts.
+- **DEP-02 (Low):** Move `@tailwindcss/vite` from `dependencies` to `devDependencies` during next dep maintenance.
+- **Dashboard items 1–14 above** require manual action in Supabase/Vercel dashboards; they cannot be automated from this codebase.
