@@ -317,6 +317,12 @@ export default function Theme() {
     toast.info(`Applied ${preset.label} preset.`)
   }
 
+  const applyNavPreset = (preset: Preset) => {
+    setNavDark((d) => ({ ...d, active_bg: preset.accent, active_text: preset.accent }))
+    setNavLight((l) => ({ ...l, active_bg: preset.accent, active_text: preset.accent }))
+    toast.info(`Applied ${preset.label} navbar accent preset.`)
+  }
+
   const handleReset = () => {
     setMode(DEFAULT_THEME.default_mode!)
     setHeadingFont(DEFAULT_THEME.fonts!.heading)
@@ -592,6 +598,33 @@ export default function Theme() {
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-2.5 pt-2 border-t border-line">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wider text-muted">
+                Quick Presets · Navbar Accent Colors
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                Applies active pill background and active link accent to both dark and light navbar themes.
+              </p>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => applyNavPreset(p)}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-line bg-surface hover:border-accent/50 transition-colors text-xs font-mono uppercase tracking-wider"
+                >
+                  <span
+                    className="size-3 inline-block rounded-full border border-line"
+                    style={{ background: `rgb(${p.accent})` }}
+                  />
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3">
