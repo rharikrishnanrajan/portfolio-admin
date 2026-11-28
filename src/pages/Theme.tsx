@@ -6,7 +6,12 @@ import { friendlyErrorMessage } from '../lib/errors'
 import { rgbStringToHex, hexToRgbString, contrastRatio } from '../lib/color'
 import { siteSettingsSchema } from '../lib/schemas'
 import { PageHeader, useToast } from '../components/ui'
-import type { SiteThemeJson, ThemePalette } from '../types/rows'
+import type {
+  NavbarThemePalette,
+  NavbarThemeStyle,
+  SiteThemeJson,
+  ThemePalette,
+} from '../types/rows'
 
 // ----- Constants -----
 const HEADING_FONTS = ['Inter Variable', 'Georgia', 'Merriweather', 'Playfair Display', 'Raleway', 'Nunito']
@@ -51,15 +56,51 @@ const DEFAULT_LIGHT: ThemePalette = {
   accent2: '67 56 202',
 }
 
+const NAVBAR_TOKEN_LABELS: { key: keyof NavbarThemePalette; label: string }[] = [
+  { key: 'bg', label: 'Bar Background' },
+  { key: 'border', label: 'Bar Border' },
+  { key: 'text', label: 'Brand & Active' },
+  { key: 'muted', label: 'Nav Links' },
+  { key: 'pill_bg', label: 'Nav Pill Bg' },
+  { key: 'active_bg', label: 'Active Pill Bg' },
+  { key: 'active_text', label: 'Active Link Text' },
+]
+
+const NAVBAR_STYLES: { value: NavbarThemeStyle; label: string }[] = [
+  { value: 'glass', label: 'Translucent (Glass)' },
+  { value: 'solid', label: 'Solid Bar' },
+  { value: 'transparent', label: 'Transparent (Minimal)' },
+]
+
+function paletteToNavPalette(p: ThemePalette): NavbarThemePalette {
+  return {
+    bg: p.bg,
+    border: p.border,
+    text: p.text,
+    muted: p.muted,
+    pill_bg: p.surface,
+    active_bg: p.accent,
+    active_text: p.accent,
+  }
+}
+
+const DEFAULT_NAV_DARK: NavbarThemePalette = paletteToNavPalette(DEFAULT_DARK)
+const DEFAULT_NAV_LIGHT: NavbarThemePalette = paletteToNavPalette(DEFAULT_LIGHT)
+
 const DEFAULT_THEME: SiteThemeJson = {
   default_mode: 'dark',
   fonts: { heading: 'Inter Variable', mono: 'JetBrains Mono Variable' },
   dark: DEFAULT_DARK,
   light: DEFAULT_LIGHT,
+  navbar: {
+    style: 'glass',
+    dark: DEFAULT_NAV_DARK,
+    light: DEFAULT_NAV_LIGHT,
+  },
 }
 
 // ---- Helper: clone palette ----
-function clonePalette(p: ThemePalette): ThemePalette {
+function clonePalette<T extends object>(p: T): T {
   return { ...p }
 }
 
@@ -125,10 +166,14 @@ function ColorRow({
 // ---- Live preview component ----
 function LivePreview({
   palette,
+  navPalette,
+  navStyle,
   headingFont,
   monoFont,
 }: {
   palette: ThemePalette
+  navPalette: NavbarThemePalette
+  navStyle: NavbarThemeStyle
   headingFont: string
   monoFont: string
 }) {
@@ -140,6 +185,18 @@ function LivePreview({
     '--preview-muted': `rgb(${palette.muted})`,
     '--preview-accent': `rgb(${palette.accent})`,
     '--preview-accent2': `rgb(${palette.accent2})`,
+    '--preview-nav-bg':
+      navStyle === 'transparent'
+        ? 'transparent'
+        : navStyle === 'solid'
+          ? `rgb(${navPalette.bg})`
+          : `rgb(${navPalette.bg} / 0.85)`,
+    '--preview-nav-border': navStyle === 'transparent' ? 'transparent' : `rgb(${navPalette.border})`,
+    '--preview-nav-text': `rgb(${navPalette.text})`,
+    '--preview-nav-muted': `rgb(${navPalette.muted})`,
+    '--preview-nav-pill': `rgb(${navPalette.pill_bg} / 0.75)`,
+    '--preview-nav-active-bg': `rgb(${navPalette.active_bg} / 0.15)`,
+    '--preview-nav-active-text': `rgb(${navPalette.active_text})`,
   } as React.CSSProperties
 
   return (
@@ -149,28 +206,47 @@ function LivePreview({
       aria-label="Theme live preview"
     >
       <style>{`
-        .prev-wrap { background: var(--preview-bg); color: var(--preview-text); font-family: '${headingFont}', system-ui, sans-serif; padding: 1rem; border: 1px solid var(--preview-border); }
+        .prev-wrap { background: var(--preview-bg); color: var(--preview-text); font-family: '${headingFont}', system-ui, sans-serif; border: 1px solid var(--preview-border); overflow: hidden; }
+        .prev-navbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem 1rem; background: var(--preview-nav-bg); border-bottom: 1px solid var(--preview-nav-border); backdrop-filter: ${navStyle === 'glass' ? 'blur(10px)' : 'none'}; }
+        .prev-brand { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 700; color: var(--preview-nav-text); }
+        .prev-logo { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid rgb(${navPalette.border}); background: rgb(${navPalette.pill_bg}); font-family: '${monoFont}', monospace; font-size: .65rem; font-weight: 700; color: var(--preview-nav-text); }
+        .prev-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .2rem .4rem; border-radius: 9999px; border: 1px solid rgb(${navPalette.border}); background: var(--preview-nav-pill); font-family: '${monoFont}', monospace; font-size: .65rem; }
+        .prev-pill-link { padding: .2rem .55rem; border-radius: 9999px; color: var(--preview-nav-muted); }
+        .prev-pill-active { padding: .2rem .55rem; border-radius: 9999px; background: var(--preview-nav-active-bg); color: var(--preview-nav-active-text); font-weight: 600; }
+        .prev-body { padding: 1rem; }
         .prev-card { background: var(--preview-surface); border: 1px solid var(--preview-border); padding: .75rem 1rem; }
         .prev-eyebrow { font-family: '${monoFont}', monospace; font-size: .65rem; letter-spacing: .2em; text-transform: uppercase; color: var(--preview-muted); }
         .prev-heading { font-size: 1.25rem; font-weight: 700; color: var(--preview-text); }
         .prev-muted { color: var(--preview-muted); font-size: .8rem; }
         .prev-btn { font-family: '${monoFont}', monospace; font-size: .7rem; letter-spacing: .15em; text-transform: uppercase; font-weight: 700; padding: .5rem 1rem; color: var(--preview-bg); background: linear-gradient(90deg, var(--preview-accent), var(--preview-accent2)); box-shadow: 0 0 20px rgb(${palette.accent}/.35); border: none; cursor: pointer; }
-        .prev-nav { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .75rem; border: 1px solid var(--preview-border); background: rgb(${palette.accent}/.15); color: var(--preview-accent); font-family: '${monoFont}', monospace; font-size: .7rem; letter-spacing: .15em; text-transform: uppercase; }
         .prev-chip { font-family: '${monoFont}', monospace; font-size: .65rem; padding: .2rem .5rem; border: 1px solid var(--preview-border); background: var(--preview-bg); color: var(--preview-text); }
       `}</style>
       <div className="prev-wrap">
-        <p className="prev-eyebrow mb-1">Preview</p>
-        <div className="prev-card mb-3">
-          <p className="prev-eyebrow">Section eyebrow</p>
-          <h2 className="prev-heading">Theme Preview Card</h2>
-          <p className="prev-muted">Surface card with muted supporting text.</p>
+        <div className="prev-navbar">
+          <span className="prev-brand">
+            <span className="prev-logo">HK</span>
+            <span>Portfolio</span>
+          </span>
+          <div className="prev-pill">
+            <span className="prev-pill-active">About</span>
+            <span className="prev-pill-link">Projects</span>
+            <span className="prev-pill-link">Skills</span>
+          </div>
+          <span className="prev-chip">Connect</span>
         </div>
-        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.75rem' }}>
-          <span className="prev-nav">Nav Item</span>
-          <span className="prev-chip">mono chip</span>
-          <span className="prev-chip">code</span>
+        <div className="prev-body">
+          <p className="prev-eyebrow mb-1">Preview</p>
+          <div className="prev-card mb-3">
+            <p className="prev-eyebrow">Section eyebrow</p>
+            <h2 className="prev-heading">Theme Preview Card</h2>
+            <p className="prev-muted">Surface card with muted supporting text.</p>
+          </div>
+          <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.75rem' }}>
+            <span className="prev-chip">mono chip</span>
+            <span className="prev-chip">code</span>
+          </div>
+          <button className="prev-btn" type="button">Gradient Button</button>
         </div>
-        <button className="prev-btn" type="button">Gradient Button</button>
       </div>
     </div>
   )
@@ -190,6 +266,9 @@ export default function Theme() {
   const [monoFont, setMonoFont] = useState(DEFAULT_THEME.fonts!.mono)
   const [dark, setDark] = useState<ThemePalette>(clonePalette(DEFAULT_DARK))
   const [light, setLight] = useState<ThemePalette>(clonePalette(DEFAULT_LIGHT))
+  const [navStyle, setNavStyle] = useState<NavbarThemeStyle>('glass')
+  const [navDark, setNavDark] = useState<NavbarThemePalette>(clonePalette(DEFAULT_NAV_DARK))
+  const [navLight, setNavLight] = useState<NavbarThemePalette>(clonePalette(DEFAULT_NAV_LIGHT))
   const [previewMode, setPreviewMode] = useState<'dark' | 'light'>('dark')
 
   const fetchTheme = async () => {
@@ -210,8 +289,13 @@ export default function Theme() {
       setMode(t.default_mode || 'dark')
       setHeadingFont(t.fonts?.heading || DEFAULT_THEME.fonts!.heading)
       setMonoFont(t.fonts?.mono || DEFAULT_THEME.fonts!.mono)
-      setDark({ ...DEFAULT_DARK, ...(t.dark || {}) })
-      setLight({ ...DEFAULT_LIGHT, ...(t.light || {}) })
+      const resolvedDark = { ...DEFAULT_DARK, ...(t.dark || {}) }
+      const resolvedLight = { ...DEFAULT_LIGHT, ...(t.light || {}) }
+      setDark(resolvedDark)
+      setLight(resolvedLight)
+      setNavStyle(t.navbar?.style || 'glass')
+      setNavDark({ ...paletteToNavPalette(resolvedDark), ...(t.navbar?.dark || {}) })
+      setNavLight({ ...paletteToNavPalette(resolvedLight), ...(t.navbar?.light || {}) })
     } catch (err) {
       setFetchError(friendlyErrorMessage(err))
     } finally {
@@ -222,6 +306,7 @@ export default function Theme() {
   useEffect(() => { void fetchTheme() }, [])
 
   const activePalette = previewMode === 'dark' ? dark : light
+  const activeNavPalette = previewMode === 'dark' ? navDark : navLight
   const setActivePalette = previewMode === 'dark'
     ? (fn: (p: ThemePalette) => ThemePalette) => setDark(fn)
     : (fn: (p: ThemePalette) => ThemePalette) => setLight(fn)
@@ -238,7 +323,19 @@ export default function Theme() {
     setMonoFont(DEFAULT_THEME.fonts!.mono)
     setDark(clonePalette(DEFAULT_DARK))
     setLight(clonePalette(DEFAULT_LIGHT))
+    setNavStyle('glass')
+    setNavDark(clonePalette(DEFAULT_NAV_DARK))
+    setNavLight(clonePalette(DEFAULT_NAV_LIGHT))
     toast.info('Reset to default theme.')
+  }
+
+  const handleSyncNavWithPalette = () => {
+    if (previewMode === 'dark') {
+      setNavDark(paletteToNavPalette(dark))
+    } else {
+      setNavLight(paletteToNavPalette(light))
+    }
+    toast.info(`Synced ${previewMode} navbar colors with ${previewMode} palette.`)
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -261,6 +358,11 @@ export default function Theme() {
         fonts: { heading: headingFont, mono: monoFont },
         dark,
         light,
+        navbar: {
+          style: navStyle,
+          dark: navDark,
+          light: navLight,
+        },
       }
 
       const val = siteSettingsSchema.partial().safeParse({ theme: merged })
@@ -440,6 +542,76 @@ export default function Theme() {
           </div>
         </section>
 
+        {/* Navigation Bar Theme */}
+        <section className="card p-6 border-line space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <p className="eyebrow mb-1">Navigation</p>
+              <h2 className="text-lg font-bold text-ink">Navigation Bar Theme</h2>
+              <p className="text-xs text-muted mt-0.5">
+                Customize the top navigation bar surface style and colors for dark and light modes.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncNavWithPalette}
+                className="px-3 py-1 font-mono text-xs uppercase tracking-wider border border-line bg-surface text-muted hover:text-ink transition-colors"
+              >
+                Sync with palette
+              </button>
+              {(['dark', 'light'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPreviewMode(m)}
+                  className={`px-3 py-1 font-mono text-xs uppercase tracking-wider border transition-colors ${
+                    previewMode === m ? 'border-accent/50 bg-accent/15 text-accent' : 'border-line bg-bg text-muted hover:text-ink'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="max-w-xs">
+            <label
+              htmlFor="navbar-style-select"
+              className="block font-mono text-xs uppercase tracking-wider text-muted mb-1.5"
+            >
+              Navbar Surface Style
+            </label>
+            <select
+              id="navbar-style-select"
+              value={navStyle}
+              onChange={(e) => setNavStyle(e.target.value as NavbarThemeStyle)}
+              className="input py-2 text-sm"
+            >
+              {NAVBAR_STYLES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-3">
+            {NAVBAR_TOKEN_LABELS.map(({ key, label }) => (
+              <ColorRow
+                key={key}
+                label={label}
+                value={activeNavPalette[key]}
+                onChange={(v) => {
+                  if (previewMode === 'dark') {
+                    setNavDark((d) => ({ ...d, [key]: v }))
+                  } else {
+                    setNavLight((l) => ({ ...l, [key]: v }))
+                  }
+                }}
+              />
+            ))}
+          </div>
+        </section>
+
         {/* Live Preview */}
         <section className="card p-6 border-line space-y-4">
           <div className="flex items-center justify-between gap-4">
@@ -458,7 +630,13 @@ export default function Theme() {
               ))}
             </div>
           </div>
-          <LivePreview palette={activePalette} headingFont={headingFont} monoFont={monoFont} />
+          <LivePreview
+            palette={activePalette}
+            navPalette={activeNavPalette}
+            navStyle={navStyle}
+            headingFont={headingFont}
+            monoFont={monoFont}
+          />
         </section>
 
         {saveError && (
