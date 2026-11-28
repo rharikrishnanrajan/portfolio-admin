@@ -4,13 +4,16 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  FileText,
   Loader2,
   Pencil,
   Plus,
   X,
 } from 'lucide-react'
 import { useCrud } from '../lib/useCrud'
+import { supabase } from '../lib/supabase'
 import { friendlyErrorMessage } from '../lib/errors'
+import { extractStoragePath, removeFile } from '../lib/storage'
 import { formatDateDisplay } from '../lib/date'
 import { isValidUrl } from '../lib/validation'
 import { safeUrl } from '../lib/safeUrl'
@@ -19,11 +22,12 @@ import {
   Field,
   TextArea,
   Toggle,
+  FileUpload,
   ConfirmButton,
   EmptyState,
   useToast,
 } from '../components/ui'
-import type { PublicationRow } from '../types/rows'
+import type { PublicationRow, ProjectFile } from '../types/rows'
 
 export default function Publications() {
   const { toast } = useToast()
@@ -39,9 +43,23 @@ export default function Publications() {
 
   // Add / Edit form state
   const [editingItem, setEditingItem] = useState<Partial<PublicationRow> | null>(null)
+  const [pubUrl, setPubUrl] = useState<string>('')
   const [savingItem, setSavingItem] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const formErrorRef = useRef<HTMLParagraphElement>(null)
+
+  // Clean up PDF file from portfolio bucket
+  const deleteStoragePdf = async (url: string | null | undefined) => {
+    if (!url) return
+    const path = extractStoragePath('portfolio', url)
+    if (path) {
+      try {
+        await removeFile('portfolio', path)
+      } catch (err) {
+        console.warn('Could not remove publication PDF from storage:', err)
+      }
+    }
+  }
 
   const handleNew = () => {
     setEditingItem({
@@ -50,9 +68,10 @@ export default function Publications() {
       published_on: null,
       summary: '',
       reference: '',
-      url: '',
+      url: null,
       visible: true,
     })
+    setPubUrl('')
     setFormError(null)
   }
 
@@ -62,16 +81,104 @@ export default function Publications() {
       venue: item.venue || '',
       summary: item.summary || '',
       reference: item.reference || '',
-      url: item.url || '',
+      url: item.url || null,
       published_on: item.published_on || null,
       visible: item.visible ?? true,
     })
+    setPubUrl(item.url || '')
     setFormError(null)
   }
 
   const handleCancel = () => {
     setEditingItem(null)
+    setPubUrl('')
     setFormError(null)
+  }
+
+  // Handle uploaded publication PDF
+  const handlePdfUploaded = async (file: ProjectFile) => {
+    const oldUrl = pubUrl
+
+    if (editingItem?.id) {
+      try {
+        let updateQuery = supabase
+          .from('publications')
+          .update({ url: file.url })
+          .eq('id', editingItem.id)
+
+        if (editingItem.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', editingItem.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
+        if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('Failed to update publication row.')
+        }
+
+        const updatedRow = data[0] as PublicationRow
+        setEditingItem(updatedRow)
+        setPubUrl(file.url)
+
+        if (oldUrl && oldUrl !== file.url && extractStoragePath('portfolio', oldUrl)) {
+          await deleteStoragePdf(oldUrl)
+        }
+
+        toast.success('Publication PDF uploaded and saved.')
+      } catch (err) {
+        await deleteStoragePdf(file.url)
+        const msg = friendlyErrorMessage(err)
+        toast.error(`Failed to update publication PDF: ${msg}`)
+        throw err
+      }
+    } else {
+      setPubUrl(file.url)
+      toast.success('Publication PDF uploaded.')
+    }
+  }
+
+  // Handle remove publication PDF (deleting only after row is saved with URL cleared)
+  const handleRemovePdf = async () => {
+    const oldUrl = pubUrl
+    if (!oldUrl) return
+
+    if (editingItem?.id) {
+      try {
+        let updateQuery = supabase
+          .from('publications')
+          .update({ url: null })
+          .eq('id', editingItem.id)
+
+        if (editingItem.updated_at) {
+          updateQuery = updateQuery.eq('updated_at', editingItem.updated_at)
+        }
+
+        const { data, error } = await updateQuery.select()
+        if (error) throw error
+        if (!data || data.length === 0) {
+          throw new Error('Failed to update publication row.')
+        }
+
+        const updatedRow = data[0] as PublicationRow
+        setEditingItem(updatedRow)
+        setPubUrl('')
+
+        if (extractStoragePath('portfolio', oldUrl)) {
+          await deleteStoragePdf(oldUrl)
+        }
+
+        toast.info('Publication PDF removed.')
+      } catch (err) {
+        const msg = friendlyErrorMessage(err)
+        toast.error(`Failed to remove publication PDF: ${msg}`)
+      }
+    } else {
+      if (extractStoragePath('portfolio', oldUrl)) {
+        await deleteStoragePdf(oldUrl)
+      }
+      setPubUrl('')
+      toast.info('Publication PDF removed.')
+    }
   }
 
   const handleSave = async (e: React.FormEvent) => {
@@ -87,7 +194,9 @@ export default function Publications() {
       setTimeout(() => formErrorRef.current?.scrollIntoView({ block: 'center' }), 0)
       return
     }
-    if (editingItem.url && !isValidUrl(editingItem.url)) {
+
+    const trimmedUrl = pubUrl.trim()
+    if (trimmedUrl && !isValidUrl(trimmedUrl)) {
       const msg = 'Publication URL must start with http:// or https://'
       setFormError(msg)
       toast.error(msg)
@@ -97,21 +206,40 @@ export default function Publications() {
     }
 
     setSavingItem(true)
+    const oldStorageUrl = editingItem.url
+    const finalPubUrl = trimmedUrl || null
+
     try {
-      await save({
+      const savedRow = await save({
         ...editingItem,
         title: editingItem.title.trim(),
         venue: editingItem.venue?.trim() || null,
         published_on: editingItem.published_on || null,
         summary: editingItem.summary?.trim() || null,
         reference: editingItem.reference?.trim() || null,
-        url: editingItem.url?.trim() || null,
+        url: finalPubUrl,
         visible: editingItem.visible ?? true,
       })
 
+      if (!savedRow) {
+        throw new Error('No row was updated. Check the id and your login.')
+      }
+
+      if (
+        oldStorageUrl &&
+        oldStorageUrl !== finalPubUrl &&
+        extractStoragePath('portfolio', oldStorageUrl)
+      ) {
+        await deleteStoragePdf(oldStorageUrl)
+      }
+
       toast.success(editingItem.id ? 'Publication updated.' : 'Publication created.')
       setEditingItem(null)
+      setPubUrl('')
     } catch (err) {
+      if (!editingItem.id && finalPubUrl && extractStoragePath('portfolio', finalPubUrl)) {
+        await deleteStoragePdf(finalPubUrl)
+      }
       const msg = friendlyErrorMessage(err)
       setFormError(msg)
       toast.error(msg)
@@ -122,9 +250,12 @@ export default function Publications() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (pub: PublicationRow) => {
     try {
-      await remove(id)
+      await remove(pub.id)
+      if (pub.url) {
+        await deleteStoragePdf(pub.url)
+      }
       toast.success('Publication deleted.')
     } catch (err) {
       const msg = friendlyErrorMessage(err)
@@ -233,20 +364,75 @@ export default function Publications() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field
-              label="Citation / Reference / DOI"
-              value={editingItem.reference || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, reference: e.target.value })}
-              placeholder="e.g. DOI: 10.1145/..., Vol. 42, pp. 110-125"
-            />
+          <Field
+            label="Citation / Reference / DOI"
+            value={editingItem.reference || ''}
+            onChange={(e) => setEditingItem({ ...editingItem, reference: e.target.value })}
+            placeholder="e.g. DOI: 10.1145/..., Vol. 42, pp. 110-125"
+          />
+
+          {/* Publication URL & Document Upload */}
+          <div className="space-y-4 pt-2 border-t border-line">
             <Field
               label="Publication URL"
-              value={editingItem.url || ''}
-              onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
-              placeholder="https://doi.org/... or https://arxiv.org/..."
-              hint="Must start with http:// or https://"
+              value={pubUrl}
+              onChange={(e) => setPubUrl(e.target.value)}
+              placeholder="https://doi.org/... or upload a PDF below"
+              hint="External DOI/paper link, or auto-filled when uploading a publication PDF. Empty box saves null."
             />
+
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wider text-muted mb-1.5">
+                Publication Document (PDF)
+              </p>
+              {pubUrl && extractStoragePath('portfolio', pubUrl) ? (
+                <div className="border border-line bg-surface p-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 border border-line bg-bg text-accent shrink-0">
+                      <FileText className="size-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink truncate">Attached Storage Document</p>
+                      <p className="text-xs text-muted truncate font-mono">
+                        {pubUrl}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {safeUrl(pubUrl) ? (
+                      <a
+                        href={safeUrl(pubUrl)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 border border-line bg-bg text-muted hover:text-ink transition-colors"
+                        title="View PDF"
+                      >
+                        <ExternalLink className="size-4" />
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleRemovePdf}
+                      className="p-1.5 border border-line bg-bg text-muted hover:text-rose-400 transition-colors"
+                      title="Remove PDF from storage"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <FileUpload
+                  bucket="portfolio"
+                  folder="publications"
+                  accept=".pdf,application/pdf"
+                  icon={<FileText className="size-4 text-accent" />}
+                  buttonText="Upload Publication Document"
+                  fileHint="(PDF up to 10 MB)"
+                  onUploaded={handlePdfUploaded}
+                  hint="Upload publication PDF to the portfolio bucket (auto-populates Publication URL above)"
+                />
+              )}
+            </div>
           </div>
 
           <TextArea
@@ -427,7 +613,7 @@ export default function Publications() {
 
                   {/* Delete button with confirm */}
                   <ConfirmButton
-                    onConfirm={() => handleDelete(item.id)}
+                    onConfirm={() => handleDelete(item)}
                     confirmText="Delete publication?"
                     confirmButtonText="Yes, delete"
                   />

@@ -482,6 +482,9 @@ export default function Certifications() {
                   bucket="portfolio"
                   folder="certifications"
                   accept=".pdf,application/pdf"
+                  icon={<Award className="size-4 text-amber-400" />}
+                  buttonText="Upload Certificate"
+                  fileHint="(PDF up to 10 MB)"
                   onUploaded={handlePdfUploaded}
                   hint="Upload certificate verification PDF to the portfolio bucket (auto-populates Credential URL above)"
                 />

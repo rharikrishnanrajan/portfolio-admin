@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { AlertCircle, ExternalLink, FileText, Loader2, Upload, X } from 'lucide-react'
 import { safeName, uploadFile, removeFile, sanitizeStoragePath } from '../../lib/storage'
 import { safeUrl } from '../../lib/safeUrl'
@@ -12,6 +12,9 @@ export interface FileUploadProps {
   disabled?: boolean
   hint?: string
   accept?: string
+  icon?: ReactNode
+  buttonText?: string
+  fileHint?: string
 }
 
 export function FileUpload({
@@ -22,6 +25,9 @@ export function FileUpload({
   disabled = false,
   hint,
   accept = '.pdf,.png,.jpg,.jpeg,.webp,.avif,.docx,.pptx,.xlsx',
+  icon,
+  buttonText = 'Click to upload file',
+  fileHint = '(PDF, DOCX, PPTX, XLSX, images up to 20 MB)',
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,11 +88,11 @@ export function FileUpload({
         </label>
       )}
 
-      <div
+      <button
+        type="button"
         onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
-        className={`border border-dashed border-line bg-surface/50 hover:bg-surface hover:border-accent/50 transition-colors p-4 text-center flex flex-col items-center justify-center cursor-pointer ${
-          disabled || uploading ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
+        disabled={disabled || uploading}
+        className={`w-full border border-dashed border-line bg-surface/50 hover:bg-surface hover:border-accent/50 transition-colors p-4 text-center flex flex-col items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {uploading ? (
           <div className="flex items-center gap-2">
@@ -96,15 +102,17 @@ export function FileUpload({
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-ink font-medium">
-            <Upload className="size-4 text-accent" />
-            <span>Click to upload file</span>
-            <span className="text-xs text-muted font-normal">
-              (PDF, DOCX, PPTX, XLSX, images up to 20 MB)
-            </span>
+          <div className="flex items-center gap-2 text-sm text-ink font-medium flex-wrap justify-center">
+            {icon ?? <Upload className="size-4 text-accent" />}
+            <span>{buttonText}</span>
+            {fileHint && (
+              <span className="text-xs text-muted font-normal">
+                {fileHint}
+              </span>
+            )}
           </div>
         )}
-      </div>
+      </button>
 
       <input
         ref={fileInputRef}
