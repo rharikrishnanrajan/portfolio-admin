@@ -92,7 +92,9 @@ export function FileUpload({
         type="button"
         onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
         disabled={disabled || uploading}
-        className={`w-full border border-dashed border-line bg-surface/50 hover:bg-surface hover:border-accent/50 transition-colors p-4 text-center flex flex-col items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`w-full border border-dashed border-line bg-surface/50 hover:bg-surface hover:border-accent/50 transition-colors p-4 text-center flex flex-col items-center justify-center ${
+          disabled || uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+        }`}
       >
         {uploading ? (
           <div className="flex items-center gap-2">
